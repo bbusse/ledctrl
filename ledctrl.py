@@ -10,9 +10,9 @@ import sys
 import termios
 import time
 
-ip = "192.168.5.1"
+ip = "10.64.64.88"
 port = 2342
-dim_x = 5
+dim_x = 32
 dim_y = 5
 
 f2c = lambda f: int(f * 255.0) & 0xff
@@ -660,11 +660,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", "--action", type=str, help="Execute payload", default="snake")
-    parser.add_argument("-s", "--host", type=str, help="set target host")
-    parser.add_argument("-p", "--port", type=int, help="set target port")
-    parser.add_argument("-t", "--transfer-mode", type=str, help="set transfer mode", default="udp")
-    parser.add_argument("-x", "--x", type=int, help="set display x dimension")
-    parser.add_argument("-y", "--y", type=int, help="set display y dimension")
+    parser.add_argument("-s", "--host", type=str, help="Set target host")
+    parser.add_argument("-p", "--port", type=int, help="Set target port")
+    parser.add_argument("-t", "--transfer-mode", type=str, help="Set transfer mode", default="udp")
+    parser.add_argument("-x", "--x", type=int, help="Set display x dimension")
+    parser.add_argument("-y", "--y", type=int, help="Set display y dimension")
     args = parser.parse_args()
 
     sh = handle_signals()
