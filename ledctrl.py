@@ -680,7 +680,7 @@ if __name__ == '__main__':
     if payload == "clock":
         matrix.show_clock()
 
-    if payload == "colour":
+    if payload == "set-colour":
         matrix.set_colour()
 
     if payload  == "grow_shrink_fade":
@@ -689,7 +689,7 @@ if __name__ == '__main__':
     if payload  == "kitt":
         matrix.kitt()
 
-    elif payload == "fade":
+    elif payload == "fade-colours":
       matrix.colour_fade()
       #matrix.colour_fade(["ff0000", "00ff00", "0000ff"])
 
