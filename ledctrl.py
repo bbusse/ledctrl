@@ -10,10 +10,12 @@ import sys
 import termios
 import time
 
-ip = "10.64.64.88"
-port = 2342
+server_ip = "127.0.0.1"
+server_port = 4223
+client_ip = "10.64.64.88"
+client_port = 2342
 dim_x = 32
-dim_y = 5
+dim_y = 8
 
 f2c = lambda f: int(f * 255.0) & 0xff
 c2f = lambda c: float(c) / 255.0
@@ -44,7 +46,7 @@ class matrix():
                  192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
                  255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 225, 224]
 
-    def __init__(self, con, printer, dim_x, dim_y):
+    def __init__(self, dim_x, dim_y, con, printer):
         self.con = con
         self.dim_x = dim_x
         self.dim_y = dim_y
@@ -71,7 +73,7 @@ class matrix():
         rgb = self.colour_hex_to_rgb(c_hex)
         return rgb_to_hls(rgb[0], rgb[1], rgb[2])
 
-    def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=0.1, steps=1000):
+    def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=0.001, steps=1000):
 
         for x in range(colours.__len__()):
             if not type(colours[x]) is int:
@@ -121,7 +123,7 @@ class matrix():
     def reset(self, colour="794044"):
         self.set_colour(colour)
 
-    def set_colour(self, colour="119966"):
+    def set_colour(self, colour="FFFFFF"):
         frame = []
 
         for x in range(self.npx):
@@ -136,7 +138,7 @@ class matrix():
             self.set_colour(c)
             time.sleep(t_sleep)
 
-    def set_random_pixel(self, t_sleep=3):
+    def set_random_pixel(self, t_sleep=0.5):
 
         while True:
             frame = []
@@ -452,15 +454,76 @@ class printer():
         print(chr(27) + "[2J")
 
 
-class udp():
+class udp_client():
 
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def send(self, m):
-        self.sock.sendto(bytes.fromhex(m), (ip, port))
+        self.socket.sendto(bytes.fromhex(m), (self.ip, self.port))
+
+
+class server():
+
+    def __init__(self, server_ip, server_port, client_ip, client_port, dim_x, dim_y):
+        self.ip = server_ip
+        self.port = server_port
+        self.client_con = udp_client(client_ip, client_port)
+        self.serve()
+
+        sh = handle_signals()
+        self.printer = printer(dim_x, dim_y)
+
+        self.matrix = matrix(dim_x, dim_y, self.client_con, self.printer)
+        self.matrix.reset()
+
+    def serve(self):
+        self.sock = socket.socket(socket.AF_INET,
+                                  socket.SOCK_DGRAM)
+
+        self.sock.bind((self.ip, self.port))
+
+    def receive(self):
+        data, addr = server.sock.recvfrom(1024)
+        print("received message:", data)
+
+
+    def exec_payload(self, payload):
+
+        if payload == "clock":
+            self.matrix.show_clock()
+
+        elif payload == "set-colour":
+            self.matrix.set_colour()
+
+        elif payload  == "grow_shrink_fade":
+            self.matrix.grow_shrink_fade()
+
+        elif payload  == "kitt":
+            self.matrix.kitt()
+
+        elif payload == "fade-colours":
+            self.matrix.colour_fade()
+
+        elif payload == "rainbow-snake":
+            self.matrix.rainbow_snake()
+
+        elif payload == "rainbow":
+            self.matrix.rainbow()
+
+        elif payload == "random-colour":
+            self.matrix.set_random_colour()
+
+        elif payload == "random-pixel":
+            self.matrix.set_random_pixel()
+
+        elif payload == "text":
+            self.matrix.show_text("ledctrl")
+
+        elif payload == "snake":
+            snake = snake_game(self.client_con, self.matrix)
 
 
 class kb_input():
@@ -659,54 +722,14 @@ class handle_signals:
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--action", type=str, help="Execute payload", default="snake")
+    parser.add_argument("-a", "--payload", type=str, help="Execute payload", default="snake")
     parser.add_argument("-s", "--host", type=str, help="Set target host")
     parser.add_argument("-p", "--port", type=int, help="Set target port")
     parser.add_argument("-t", "--transfer-mode", type=str, help="Set transfer mode", default="udp")
     parser.add_argument("-x", "--x", type=int, help="Set display x dimension")
     parser.add_argument("-y", "--y", type=int, help="Set display y dimension")
     args = parser.parse_args()
+    payload = args.payload
 
-    sh = handle_signals()
-
-    printer = printer(dim_x, dim_y)
-    con = udp(ip, port)
-    matrix = matrix(con, printer, dim_x, dim_y)
-
-    matrix.reset()
-
-    payload = args.action
-
-    if payload == "clock":
-        matrix.show_clock()
-
-    if payload == "set-colour":
-        matrix.set_colour()
-
-    if payload  == "grow_shrink_fade":
-        matrix.grow_shrink_fade()
-
-    if payload  == "kitt":
-        matrix.kitt()
-
-    elif payload == "fade-colours":
-      matrix.colour_fade()
-      #matrix.colour_fade(["ff0000", "00ff00", "0000ff"])
-
-    elif payload == "rainbow-snake":
-        matrix.rainbow_snake()
-
-    elif payload == "rainbow":
-        matrix.rainbow()
-
-    elif payload == "random-colour":
-        matrix.set_random_colour()
-
-    elif payload == "random-pixel":
-        matrix.set_random_pixel()
-
-    elif payload == "text":
-        matrix.show_text("ICH HAB")
-
-    elif payload == "snake":
-        snake = snake_game(con, matrix)
+    server = server(server_ip, server_port, client_ip, client_port, dim_x, dim_y)
+    server.exec_payload(payload)
