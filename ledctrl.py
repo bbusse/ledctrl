@@ -57,9 +57,9 @@ class server():
         self.serve()
 
         sh = handle_signals()
-        self.printer = printer()
+        self.prntr = printer()
 
-        self.matrix = matrix(self.sock, dim_x, dim_y, self.client_con, self.printer)
+        self.matrix = matrix(self.sock, dim_x, dim_y, self.client_con, self.prntr)
         self.matrix.reset()
 
     def set_payload(self, payload):
@@ -127,12 +127,12 @@ class matrix(server):
                  192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
                  255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 225, 224]
 
-    def __init__(self, sock, dim_x, dim_y, con, printer):
+    def __init__(self, sock, dim_x, dim_y, con, prntr):
         self.con = con
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.npx = dim_x * dim_y
-        self.prntr = printer
+        self.prntr = prntr
         self.sock = sock
 
     def exec_payload(self, payload):
