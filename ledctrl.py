@@ -1,21 +1,38 @@
 #!/usr/bin/env python3
+#
+# ledctrl
+#
+# min python version: 3.5
+#
+# dependencies:
+#  - python-systemd
+#
+# © 2016 Björn Busse (see also: LICENSE)
+# bbusse@baerlin.eu
 
-import argparse
+import logging
 import math
 import os
 import random
 import socket
+import subprocess
 import signal
 import sys
 import termios
 import time
+from systemd import journal
 
 server_ip = "127.0.0.1"
 server_port = 4223
+server_proto = "udp"
 client_ip = "10.64.64.88"
 client_port = 2342
 dim_x = 32
 dim_y = 8
+payload = "fade-colours"
+
+# info / warning / debug
+loglevel = "debug"
 
 f2c = lambda f: int(f * 255.0) & 0xff
 c2f = lambda c: float(c) / 255.0
@@ -25,7 +42,91 @@ green = lambda c: (c >> 8) & 0xff
 blue = lambda c: c & 0xff
 pack = lambda a, r, g, b: (f2c(a) << 24) | (f2c(r) << 16) | (f2c(g) << 8) | f2c(b)
 
-class matrix():
+class server():
+
+    def __init__(self, server_proto, server_ip, server_port, client_ip, client_port, dim_x, dim_y):
+        self.ip = server_ip
+        self.port = server_port
+        self.client_con = udp_client(client_ip, client_port)
+        self.server_proto = server_proto
+        self.serve()
+
+        sh = handle_signals()
+        self.printer = printer()
+
+        self.matrix = matrix(self.sock, dim_x, dim_y, self.client_con, self.printer)
+        self.matrix.reset()
+
+    def serve(self):
+        self.sock = socket.socket(socket.AF_INET,
+                                  socket.SOCK_DGRAM)
+
+        self.sock.bind((self.ip, self.port))
+        print("Serving on", self.ip, self.port)
+
+    def receive(self):
+        data = ""
+
+        # non-blocking (0x40)
+        try:
+            data, (ip, port) = self.sock.recvfrom(1024, 0x40)
+        except:
+            pass
+
+        if len(data) > 0:
+            self.parse_msg(data)
+
+    def parse_msg(self, data):
+        data = str(data).strip('b\'')
+        msg = "Received message:" + data
+        self.prntr.printd(msg)
+
+        if data == "ping":
+            self.prntr.printi("pong")
+        elif data == "get-payload":
+            self.prntr.printi("Current payload: ", self.matrix.payload)
+
+    def get_port():
+        return self.port
+
+    def exec_payload(self, payload):
+        self.payload = payload
+
+        if payload == "show-clock":
+            self.matrix.show_clock()
+
+        elif payload == "set-colour":
+            self.matrix.set_colour()
+
+        elif payload == "set-random-colour":
+            self.matrix.set_random_colour()
+
+        elif payload == "grow_shrink_fade":
+            self.matrix.grow_shrink_fade()
+
+        elif payload == "kitt":
+            self.matrix.kitt()
+
+        elif payload == "fade-colours":
+            self.matrix.colour_fade()
+
+        elif payload == "show-snake":
+            self.matrix.rainbow_snake()
+
+        elif payload == "show-rainbow":
+            self.matrix.rainbow()
+
+        elif payload == "set-random-pixel":
+            self.matrix.set_random_pixel()
+
+        elif payload == "show-text":
+            self.matrix.show_text("ledctrl")
+
+        elif payload == "play-snake":
+            snake = snake_game(self.client_con, self.matrix)
+
+
+class matrix(server):
 
     reverse_even_row = True
     status = "Reverse Pixel Order"
@@ -35,7 +136,7 @@ class matrix():
                  9, 8, 7, 6, 5,
                  10, 11, 12, 13, 14,
                  19, 18, 17, 16, 15,
-                 20, 21 , 22, 23, 24]
+                 20, 21, 22, 23, 24]
 
     px_layout = [  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23 , 24,  25,  26,  27,  28,  29 , 30,  31,
                   63,  62,  61,  60,  59,  58,  57,  56,  55,  54,  53,  52,  51,  50,  49,  48  ,47 , 46,  45,  44,  43,  42,  41,  40,  39,  38,  37,  36,  35,  34,  33,  32,
@@ -46,12 +147,13 @@ class matrix():
                  192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
                  255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 225, 224]
 
-    def __init__(self, dim_x, dim_y, con, printer):
+    def __init__(self, sock, dim_x, dim_y, con, printer):
         self.con = con
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.npx = dim_x * dim_y
         self.prntr = printer
+        self.sock = sock
 
     def get_px_pos(self, px):
         return self.px_layout.index(px)
@@ -160,7 +262,7 @@ class matrix():
     def grow_shrink_fade(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=1):
         frame = []
         pattern = []
-        pattern[0] = [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0]
+        pattern[0] = [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,n0,0,0,0,0,0,0,0,0,0]
         pattern[1] = [0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0]
         pattern[2] = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
         pattern[3] = [0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0]
@@ -248,7 +350,6 @@ class matrix():
 
             self.draw(frame)
             time.sleep(5)
-
 
     def kitt(self, c_fg = ["ff4d4d", "ff1a1a", "cc0000", "ff1a1a", "ffd4d4"], c_bg="ffffff"):
         row_fg = 3
@@ -338,7 +439,6 @@ class matrix():
             self.draw(frame)
             time.sleep(speed)
 
-
     def show_text(self, s, scroll=True, loop=True, speed=1):
         t_sleep = speed
         text = ""
@@ -411,6 +511,7 @@ class matrix():
 
 
         self.con.send(msg)
+        super().receive()
         #self.prntr.term_print(self.status)
         #self.prntr.term_draw(msg)
 
@@ -419,9 +520,38 @@ class printer():
 
     buf = ""
 
-    def __init__(self, dim_x, dim_y):
+    def __init__(self, loglevel="info", use_journal=True):
+        self.use_journal = use_journal
+        self.loglevel = loglevel
+
+    def init_canvas(dim_x, dim_y):
         self.dim_x = dim_x
         self.dim_y = dim_y
+
+    def print(self, msg):
+        print(msg)
+
+        if self.use_journal:
+            journal.send(msg)
+
+    # info
+    def printi(self, msg):
+        if self.loglevel == "info" or self.loglevel == "warning" or self.loglevel == "debug":
+            self.print(msg)
+
+    # warning
+    def printw(self, msg):
+        if self.loglevel == "warning" or self.loglevel == "debug":
+            self.print(msg)
+
+    # debug
+    def printd(self, msg):
+        if self.loglevel == "debug":
+            self.print(msg)
+
+    # exception
+    def printe():
+        self.print(msg)
 
     def term_draw(self, msg):
         start = 0
@@ -464,66 +594,8 @@ class udp_client():
     def send(self, m):
         self.socket.sendto(bytes.fromhex(m), (self.ip, self.port))
 
-
-class server():
-
-    def __init__(self, server_ip, server_port, client_ip, client_port, dim_x, dim_y):
-        self.ip = server_ip
-        self.port = server_port
-        self.client_con = udp_client(client_ip, client_port)
-        self.serve()
-
-        sh = handle_signals()
-        self.printer = printer(dim_x, dim_y)
-
-        self.matrix = matrix(dim_x, dim_y, self.client_con, self.printer)
-        self.matrix.reset()
-
-    def serve(self):
-        self.sock = socket.socket(socket.AF_INET,
-                                  socket.SOCK_DGRAM)
-
-        self.sock.bind((self.ip, self.port))
-
-    def receive(self):
-        data, addr = server.sock.recvfrom(1024)
-        print("received message:", data)
-
-
-    def exec_payload(self, payload):
-
-        if payload == "clock":
-            self.matrix.show_clock()
-
-        elif payload == "set-colour":
-            self.matrix.set_colour()
-
-        elif payload  == "grow_shrink_fade":
-            self.matrix.grow_shrink_fade()
-
-        elif payload  == "kitt":
-            self.matrix.kitt()
-
-        elif payload == "fade-colours":
-            self.matrix.colour_fade()
-
-        elif payload == "rainbow-snake":
-            self.matrix.rainbow_snake()
-
-        elif payload == "rainbow":
-            self.matrix.rainbow()
-
-        elif payload == "random-colour":
-            self.matrix.set_random_colour()
-
-        elif payload == "random-pixel":
-            self.matrix.set_random_pixel()
-
-        elif payload == "text":
-            self.matrix.show_text("ledctrl")
-
-        elif payload == "snake":
-            snake = snake_game(self.client_con, self.matrix)
+    def sendm(self, m):
+        self.socket.sendto(bytes(m, "UTF-8"), (self.ip, self.port))
 
 
 class kb_input():
@@ -709,27 +781,152 @@ class handle_signals:
     def __init__(self):
         self.original_sigint = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, self.shutdown)
+        self.prntr = printer()
 
     def restore(self):
         signal.signal(signal.SIGINT, self.original_sigint)
 
     def shutdown(self):
         self.restore()
-        print("Exiting")
-        #sys.exit(1)
+        self.prntr.printi("Exiting")
+        sys.exit(1)
+
+
+class service:
+
+    def __init__(self, name, cmd_start):
+        self.name = name
+        self.cmd_start = cmd_start
+        self.prntr = printer("debug")
+
+    def get_state(self):
+        cmd = "systemctl --user show -p SubState " + self.name
+        p = self.run_cmd(cmd)
+
+        if hasattr(p, 'stdout'):
+            r = p.stdout.strip('\n')
+        else:
+            return False
+
+        if r == "Unit ledctrl.service could not be found.":
+            return "not-found"
+
+        return r[9:]
+
+    def start_transient(self):
+        self.start("transient")
+
+    def start(self, type="transient"):
+        prntr.printi("Starting service: " + service_name)
+        cmd = 'systemd-run -t \
+                           --user \
+                           --unit=' + self.name + ' \
+                           --description="ledctrl server" \
+                           --remain-after-exit \
+                           --no-block \
+                           --send-sighup ' + self.cmd_start
+
+        # for readability
+        cmd = ' '.join(cmd.split())
+
+        p = self.run_cmd(cmd)
+        if p.stdout.strip('\n') == "Failed to start transient service unit: Unit ledctrl.service already exists.":
+            self.stop()
+
+    def restart(self):
+        prntr.printi("Restarting service: " + service_name)
+        cmd = 'systemctl --user restart ' + self.name
+        p = self.run_cmd(cmd)
+
+        if p.stdout.strip('\n') == "Failed to restart ledctrl.service: Unit ledctrl.service not found.":
+            self.prntr.printi("Restart failed. Trying to start " + self.name)
+            self.start()
+
+    def stop(self):
+        cmd = 'systemctl --user stop ' + self.name
+        self.run_cmd(cmd)
+
+    def reset_failed(self):
+        cmd = 'systemctl --user reset-failed ' + self.name
+        self.run_cmd(cmd)
+
+    def run_cmd(self, cmd):
+        self.prntr.printd("Executing: " + cmd)
+
+        try:
+            p = subprocess.run(cmd, shell=True,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT,
+                               universal_newlines=True)
+
+        except:
+            e = sys.exc_info()[0]
+            self.prntr.printe(e)
+
+        if hasattr(p, 'stdout'):
+            self.prntr.printd(p.stdout.strip('\n'))
+
+        return p
 
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--payload", type=str, help="Execute payload", default="snake")
-    parser.add_argument("-s", "--host", type=str, help="Set target host")
-    parser.add_argument("-p", "--port", type=int, help="Set target port")
-    parser.add_argument("-t", "--transfer-mode", type=str, help="Set transfer mode", default="udp")
-    parser.add_argument("-x", "--x", type=int, help="Set display x dimension")
-    parser.add_argument("-y", "--y", type=int, help="Set display y dimension")
-    args = parser.parse_args()
-    payload = args.payload
+    log = logging.getLogger('custom_logger_name')
+    log.propagate = False
+    #log.addHandler(JournalHandler())
+    #logging.root.addHandler(JournalHandler())
+    log.warning("Some message: %s", 'detail')
+    #log.setLevel(logging.DEBUG)
+    #JournalHandler(SYSLOG_IDENTIFIER='ledctrl')
 
-    server = server(server_ip, server_port, client_ip, client_port, dim_x, dim_y)
-    server.exec_payload(payload)
+    prntr = printer(loglevel)
+    cmd = sys.argv[0]
+    action = ""
+
+    if sys.argv.__len__() > 1:
+        if len(sys.argv[1]) > 0:
+            action = sys.argv[1]
+
+    sys.argv = []
+
+    service_name = "ledctrl"
+    cmd_start = cmd + " start"
+    prntr.printd(cmd_start)
+    service = service(service_name, cmd_start)
+    service_state = service.get_state()
+
+    prntr.printi("State: " + service_state)
+
+    if "start" == action:
+        server = server(server_proto,
+                        server_ip,
+                        server_port,
+                        client_ip,
+                        client_port,
+                        dim_x,
+                        dim_y)
+
+        server.exec_payload(payload)
+
+    if service_state == "not-found":
+        service.start_transient()
+
+    elif service_state == "exited":
+        service.start_transient()
+
+    elif service_state == "failed":
+        service.reset_failed()
+        service.restart()
+
+    elif service_state == "running":
+        prntr.printi("Service is running and listening on " + str(server_port))
+
+        if "stop" == action:
+            prntr.printi("Stopping ledctrl service")
+            service.stop()
+            exit(0)
+
+    if len(action) > 0:
+        prntr.printd("Sending: " + action)
+        c = udp_client(server_ip, server_port)
+        c.sendm(action)
