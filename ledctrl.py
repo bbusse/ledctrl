@@ -27,12 +27,16 @@ server_port = 4223
 server_proto = "udp"
 client_ip = "10.64.64.88"
 client_port = 2342
+client_proto = "udp"
+# number of pixels in the x dimension
 dim_x = 32
+# number of pixels in the y dimension
 dim_y = 8
+# effect to execute
 payload = "fade-colours"
 
 # info / warning / debug
-loglevel = "debug"
+loglevel = "info"
 
 f2c = lambda f: int(f * 255.0) & 0xff
 c2f = lambda c: float(c) / 255.0
@@ -41,6 +45,7 @@ red = lambda c: (c >> 16) & 0xff
 green = lambda c: (c >> 8) & 0xff
 blue = lambda c: c & 0xff
 pack = lambda a, r, g, b: (f2c(a) << 24) | (f2c(r) << 16) | (f2c(g) << 8) | f2c(b)
+
 
 class server():
 
@@ -56,6 +61,12 @@ class server():
 
         self.matrix = matrix(self.sock, dim_x, dim_y, self.client_con, self.printer)
         self.matrix.reset()
+
+    def set_payload(self, payload):
+        self.payload = payload
+
+    def get_payload(self):
+        return self.payload
 
     def serve(self):
         self.sock = socket.socket(socket.AF_INET,
@@ -76,55 +87,23 @@ class server():
         if len(data) > 0:
             self.parse_msg(data)
 
+    def get_port():
+        return self.port
+
     def parse_msg(self, data):
         data = str(data).strip('b\'')
         msg = "Received message:" + data
         self.prntr.printd(msg)
 
-        if data == "ping":
+        if payload == "ping":
             self.prntr.printi("pong")
-        elif data == "get-payload":
-            self.prntr.printi("Current payload: " + self.payload)
+            exit(0)
 
-    def get_port():
-        return self.port
+        elif payload == "get-payload":
+            self.prntr.printi("Current payload: " + self.get_payload())
+            exit(0)
 
-    def exec_payload(self, payload):
-        self.payload = payload
-        self.matrix.set_payload(payload)
-
-        if payload == "show-clock":
-            self.matrix.show_clock()
-
-        elif payload == "set-colour":
-            self.matrix.set_colour()
-
-        elif payload == "set-random-colour":
-            self.matrix.set_random_colour()
-
-        elif payload == "grow_shrink_fade":
-            self.matrix.grow_shrink_fade()
-
-        elif payload == "kitt":
-            self.matrix.kitt()
-
-        elif payload == "fade-colours":
-            self.matrix.colour_fade()
-
-        elif payload == "show-snake":
-            self.matrix.rainbow_snake()
-
-        elif payload == "show-rainbow":
-            self.matrix.rainbow()
-
-        elif payload == "set-random-pixel":
-            self.matrix.set_random_pixel()
-
-        elif payload == "show-text":
-            self.matrix.show_text("ledctrl")
-
-        elif payload == "play-snake":
-            snake = snake_game(self.client_con, self.matrix)
+        self.exec_payload(data)
 
 
 class matrix(server):
@@ -156,8 +135,53 @@ class matrix(server):
         self.prntr = printer
         self.sock = sock
 
-    def set_payload(self, payload):
-        self.payload = payload
+    def exec_payload(self, payload):
+
+        self.prntr.printi("Executing payload: " + payload)
+
+        if payload == "set-colour":
+            self.set_payload(payload)
+            self.set_colour()
+
+        elif payload == "set-random-colour":
+            self.set_payload(payload)
+            self.set_random_colour()
+
+        elif payload == "grow_shrink_fade":
+            self.set_payload(payload)
+            self.grow_shrink_fade()
+
+        elif payload == "kitt":
+            self.set_payload(payload)
+            self.kitt()
+
+        elif payload == "fade-colours":
+            self.set_payload(payload)
+            self.colour_fade()
+
+        elif payload == "show-snake":
+            self.set_payload(payload)
+            self.show_rainbow_snake()
+
+        elif payload == "show-rainbow":
+            self.set_payload(payload)
+            self.show_rainbow()
+
+        elif payload == "set-random-pixel":
+            self.set_payload(payload)
+            self.set_random_pixel()
+
+        elif payload == "show-text":
+            self.set_payload(payload)
+            self.show_text("ledctrl")
+
+        elif payload == "show-clock":
+            self.set_payload(payload)
+            self.show_clock()
+
+        elif payload == "play-snake":
+            self.set_payload(payload)
+            snake = snake_game(self.client_con, self.matrix)
 
     def get_px_pos(self, px):
         return self.px_layout.index(px)
@@ -266,7 +290,7 @@ class matrix(server):
     def grow_shrink_fade(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=1):
         frame = []
         pattern = []
-        pattern[0] = [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,n0,0,0,0,0,0,0,0,0,0]
+        pattern[0] = [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0]
         pattern[1] = [0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0]
         pattern[2] = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
         pattern[3] = [0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0]
@@ -284,7 +308,7 @@ class matrix(server):
             colours = self.shift(colours)
             time.sleep(speed)
 
-    def rainbow(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=0.5):
+    def show_rainbow(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=0.5):
 
         ncolours = colours.__len__()
 
@@ -299,7 +323,7 @@ class matrix(server):
             colours = self.shift(colours, 1)
             time.sleep(speed)
 
-    def rainbow_snake(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], c_bg="444444", speed=1):
+    def show_rainbow_snake(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], c_bg="444444", speed=1):
         frame = []
 
         for x in range(colours.__len__()):
@@ -873,15 +897,27 @@ class service:
         return p
 
 
+def show_help():
+    print("\n")
+    print("  Usage:")
+    print("")
+    print("    ledctrl help                            - show this dialog")
+    print("    ledctrl fade-colours                    - fade colours")
+    print("    ledctrl set-colour                      - set colour")
+    print("    ledctrl show-text                       - show text")
+    print("    ledctrl play-snake                      - start snake game")
+    print("\n")
+
+
 if __name__ == '__main__':
 
     log = logging.getLogger('custom_logger_name')
     log.propagate = False
     #log.addHandler(JournalHandler())
     #logging.root.addHandler(JournalHandler())
-    log.warning("Some message: %s", 'detail')
     #log.setLevel(logging.DEBUG)
     #JournalHandler(SYSLOG_IDENTIFIER='ledctrl')
+    #log.warning("Some message: %s", 'detail')
 
     prntr = printer(loglevel)
     cmd = sys.argv[0]
@@ -900,6 +936,10 @@ if __name__ == '__main__':
 
     prntr.printi("State: " + service_state)
 
+    if "help" == action:
+        show_help()
+        exit(0)
+
     if "start" == action:
         server = server(server_proto,
                         server_ip,
@@ -909,7 +949,7 @@ if __name__ == '__main__':
                         dim_x,
                         dim_y)
 
-        server.exec_payload(payload)
+        server.matrix.exec_payload(payload)
 
     if service_state == "not-found":
         service.start_transient()
