@@ -825,7 +825,7 @@ class service:
     def __init__(self, name, cmd_start):
         self.name = name
         self.cmd_start = cmd_start
-        self.prntr = printer("debug")
+        self.prntr = printer()
 
     def get_state(self):
         cmd = "systemctl --user show -p SubState " + self.name
@@ -898,8 +898,7 @@ class service:
 
 
 def show_help():
-    print("\n")
-    print("  Usage:")
+    print("\n  Usage:")
     print("")
     print("    ledctrl help                            - show this dialog")
     print("    ledctrl fade-colours                    - fade colours")
@@ -934,7 +933,7 @@ if __name__ == '__main__':
     service = service(service_name, cmd_start)
     service_state = service.get_state()
 
-    prntr.printi("State: " + service_state)
+    prntr.printi("ledctrl service state: " + service_state)
 
     if "help" == action:
         show_help()
