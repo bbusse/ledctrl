@@ -84,13 +84,14 @@ class server():
         if data == "ping":
             self.prntr.printi("pong")
         elif data == "get-payload":
-            self.prntr.printi("Current payload: ", self.matrix.payload)
+            self.prntr.printi("Current payload: " + self.payload)
 
     def get_port():
         return self.port
 
     def exec_payload(self, payload):
         self.payload = payload
+        self.matrix.set_payload(payload)
 
         if payload == "show-clock":
             self.matrix.show_clock()
@@ -154,6 +155,9 @@ class matrix(server):
         self.npx = dim_x * dim_y
         self.prntr = printer
         self.sock = sock
+
+    def set_payload(self, payload):
+        self.payload = payload
 
     def get_px_pos(self, px):
         return self.px_layout.index(px)
@@ -891,7 +895,6 @@ if __name__ == '__main__':
 
     service_name = "ledctrl"
     cmd_start = cmd + " start"
-    prntr.printd(cmd_start)
     service = service(service_name, cmd_start)
     service_state = service.get_state()
 
