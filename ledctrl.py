@@ -905,6 +905,7 @@ def show_help():
     print("    ledctrl set-colour                      - set colour")
     print("    ledctrl show-text                       - show text")
     print("    ledctrl play-snake                      - start snake game")
+    print("    ledctrl stop                            - stop snake game")
     print("\n")
 
 
