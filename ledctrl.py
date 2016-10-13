@@ -34,9 +34,8 @@ dim_x = 32
 dim_y = 8
 # effect to execute
 payload = "fade-colours"
-
 # info / warning / debug
-loglevel = "info"
+loglevel = "debug"
 
 f2c = lambda f: int(f * 255.0) & 0xff
 c2f = lambda c: float(c) / 255.0
@@ -182,6 +181,11 @@ class matrix(server):
         elif payload == "play-snake":
             self.set_payload(payload)
             snake = snake_game(self.client_con, self.matrix)
+
+        else:
+            self.prntr.printi("There is no such command or payload")
+            show_help()
+            return False
 
     def get_px_pos(self, px):
         return self.px_layout.index(px)
@@ -578,8 +582,8 @@ class printer():
             self.print(msg)
 
     # exception
-    def printe():
-        self.print(msg)
+    def printe(self, msg):
+        print(msg)
 
     def term_draw(self, msg):
         start = 0
@@ -822,24 +826,29 @@ class handle_signals:
 
 class service:
 
-    def __init__(self, name, cmd_start):
+    def __init__(self, name, cmd_start, desc, loglevel="debug"):
         self.name = name
         self.cmd_start = cmd_start
-        self.prntr = printer()
+        self.desc = desc
+        self.prntr = printer(loglevel)
 
     def get_state(self):
         cmd = "systemctl --user show -p SubState " + self.name
         p = self.run_cmd(cmd)
+        r = "unknown"
 
-        if hasattr(p, 'stdout'):
-            r = p.stdout.strip('\n')
-        else:
-            return False
+        if p != False:
+            if hasattr(p, 'stdout') and p.stdout != None:
+                r = p.stdout.strip('\n')
 
         if r == "Unit ledctrl.service could not be found.":
             return "not-found"
 
-        return r[9:]
+        # remove 'SubState=' from string
+        if len(r) > 8 and r != "unknown":
+            return r[9:]
+
+        return r
 
     def start_transient(self):
         self.start("transient")
@@ -849,7 +858,7 @@ class service:
         cmd = 'systemd-run -t \
                            --user \
                            --unit=' + self.name + ' \
-                           --description="ledctrl server" \
+                           --description="' + self.desc + '" \
                            --remain-after-exit \
                            --no-block \
                            --send-sighup ' + self.cmd_start
@@ -857,7 +866,7 @@ class service:
         # for readability
         cmd = ' '.join(cmd.split())
 
-        p = self.run_cmd(cmd)
+        p = self.run_cmd(cmd, shell=False, stdout=False, stderr=False)
         if p.stdout.strip('\n') == "Failed to start transient service unit: Unit ledctrl.service already exists.":
             self.stop()
 
@@ -878,24 +887,31 @@ class service:
         cmd = 'systemctl --user reset-failed ' + self.name
         self.run_cmd(cmd)
 
-    def run_cmd(self, cmd):
+    def run_cmd(self, cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True):
         self.prntr.printd("Executing: " + cmd)
 
         try:
-            p = subprocess.run(cmd, shell=True,
+            p = subprocess.run(cmd,
+                               stdin=None,
+                               input=None,
                                stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT,
+                               shell=True,
                                universal_newlines=True)
 
         except:
             e = sys.exc_info()[0]
-            self.prntr.printe(e)
+            print(e)
+            raise
 
-        if hasattr(p, 'stdout'):
-            self.prntr.printd(p.stdout.strip('\n'))
+        try:
+            p
+
+        except NameError:
+           self.prntr.printi('Could not execute: ' + cmd)
+           return False
 
         return p
-
 
 def show_help():
     print("\n  Usage:")
@@ -911,7 +927,7 @@ def show_help():
 
 if __name__ == '__main__':
 
-    log = logging.getLogger('custom_logger_name')
+    log = logging.getLogger('ledctrl')
     log.propagate = False
     #log.addHandler(JournalHandler())
     #logging.root.addHandler(JournalHandler())
@@ -930,11 +946,14 @@ if __name__ == '__main__':
     sys.argv = []
 
     service_name = "ledctrl"
-    cmd_start = cmd + " start"
-    service = service(service_name, cmd_start)
+    cmd_start = "/usr/src/ledctrl/ledctrl.py start"
+    service = service(service_name, cmd_start, "ledctrl server")
     service_state = service.get_state()
 
-    prntr.printi("ledctrl service state: " + service_state)
+    if service_state == False:
+        prntr.printi("Could not determine service state")
+    else:
+        prntr.printi(service_name + " service state: " + service_state)
 
     if "help" == action:
         show_help()
@@ -968,6 +987,8 @@ if __name__ == '__main__':
             prntr.printi("Stopping ledctrl service")
             service.stop()
             exit(0)
+
+        server.matrix.exec_payload(action)
 
     if len(action) > 0:
         prntr.printd("Sending: " + action)
