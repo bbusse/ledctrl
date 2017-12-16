@@ -22,16 +22,18 @@ import termios
 import time
 from systemd import journal
 
+#server_ip = "::1"
 server_ip = "127.0.0.1"
 server_port = 4223
 server_proto = "udp"
-client_ip = "10.64.64.88"
+#client_ip = "10.64.64.98"
+client_ip = "10.64.64.75"
 client_port = 2342
 client_proto = "udp"
 # number of pixels in the x dimension
-dim_x = 32
+dim_x = 19
 # number of pixels in the y dimension
-dim_y = 8
+dim_y = 1
 # effect to execute
 payload = "fade-colours"
 # info / warning / debug
@@ -91,22 +93,23 @@ class server():
 
     def parse_msg(self, data):
         data = str(data).strip('b\'')
-        msg = "Received message:" + data
-        self.prntr.printd(msg)
+        msg = "Received message: " + data
+        self.prntr.printi(msg)
 
-        if payload == "ping":
+        if data == "ping":
             self.prntr.printi("pong")
-            exit(0)
+            return
 
-        elif payload == "get-payload":
+        elif data == "get-payload":
             self.prntr.printi("Current payload: " + self.get_payload())
-            exit(0)
+            return
 
         self.exec_payload(data)
 
 
 class matrix(server):
 
+    state = "idle"
     reverse_even_row = True
     status = "Reverse Pixel Order"
     frame_prev = []
@@ -134,13 +137,32 @@ class matrix(server):
         self.prntr = prntr
         self.sock = sock
 
-    def exec_payload(self, payload):
+    def exec_payload(self, data):
+        args = data.split()
+        print(*args, sep='\n')
+        payload = args.pop(0)
+        self.state = payload
 
         self.prntr.printi("Executing payload: " + payload)
 
-        if payload == "set-colour":
+        if payload == "turn-on":
+            colour = "FF3399"
             self.set_payload(payload)
-            self.set_colour()
+            self.set_colour(colour)
+
+        elif payload == "turn-off":
+            colour = "000000"
+            self.set_payload(payload)
+            self.set_colour(colour)
+
+        elif payload == "set-colour":
+            colour = "FF3399"
+            self.set_payload(payload)
+            if len(args) > 0:
+                if len(args[0]) == 6:
+                    colour = args[0]
+
+            self.set_colour(colour)
 
         elif payload == "set-random-colour":
             self.set_payload(payload)
@@ -207,7 +229,8 @@ class matrix(server):
         rgb = self.colour_hex_to_rgb(c_hex)
         return rgb_to_hls(rgb[0], rgb[1], rgb[2])
 
-    def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=0.001, steps=1000):
+    def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=0.1, steps=1000):
+        self.prntr.printi("Running payload: " + payload + " at speed: " + str(speed))
 
         for x in range(colours.__len__()):
             if not type(colours[x]) is int:
@@ -215,10 +238,14 @@ class matrix(server):
                 colours[x] = int(c, 16)
 
         colours = self.colour_get_gradient(colours, steps)
+        self.prntr.printi(str(colours.__len__()))
 
         while True:
             for x in range(colours.__len__()):
                 self.set_colour(colours[x])
+                if self.state != payload:
+                    return
+
                 time.sleep(speed)
 
             # reverse list
@@ -265,7 +292,7 @@ class matrix(server):
 
         self.draw(frame)
 
-    def set_random_colour(self, t_sleep=3):
+    def set_random_colour(self, t_sleep=30):
 
         while True:
             c = self.colour_gen_hex_code()
@@ -514,7 +541,7 @@ class matrix(server):
 
         return f5x5[c]
 
-    def font_show_char(self, c, c_fg="ff0000", c_bg="ffffff"):
+    def font_show_char(self, c, c_fg="FF0000", c_bg="FFFFFF"):
         frame = []
         p = self.font_get_char(c)
 
@@ -621,13 +648,14 @@ class udp_client():
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
 
     def send(self, m):
-        self.socket.sendto(bytes.fromhex(m), (self.ip, self.port))
+        self.sock.sendto(bytes.fromhex(m), (self.ip, self.port))
 
     def sendm(self, m):
-        self.socket.sendto(bytes(m, "UTF-8"), (self.ip, self.port))
+        self.sock.sendto(bytes(m, "UTF-8"), (self.ip, self.port))
 
 
 class kb_input():
@@ -868,7 +896,7 @@ class service:
 
         p = self.run_cmd(cmd, shell=False, stdout=False, stderr=False)
         if p.stdout.strip('\n') == "Failed to start transient service unit: Unit ledctrl.service already exists.":
-            self.stop()
+            self.restart()
 
     def restart(self):
         prntr.printi("Restarting service: " + service_name)
@@ -917,8 +945,10 @@ def show_help():
     print("\n  Usage:")
     print("")
     print("    ledctrl help                            - show this dialog")
-    print("    ledctrl fade-colours                    - fade colours")
+    print("    ledctrl turn-on                         - turn on the lights")
+    print("    ledctrl turn-off                        - turn off the lights")
     print("    ledctrl set-colour                      - set colour")
+    print("    ledctrl fade-colours                    - fade colours")
     print("    ledctrl show-text                       - show text")
     print("    ledctrl play-snake                      - start snake game")
     print("    ledctrl stop                            - stop snake game")
@@ -938,10 +968,14 @@ if __name__ == '__main__':
     prntr = printer(loglevel)
     cmd = sys.argv[0]
     action = ""
+    payload_arg_0 = ""
 
     if sys.argv.__len__() > 1:
         if len(sys.argv[1]) > 0:
             action = sys.argv[1]
+        if sys.argv.__len__() > 2:
+            if len(sys.argv[2]) > 0:
+                payload_arg_0 = sys.argv[2]
 
     sys.argv = []
 
@@ -988,9 +1022,12 @@ if __name__ == '__main__':
             service.stop()
             exit(0)
 
-        server.matrix.exec_payload(action)
-
     if len(action) > 0:
-        prntr.printd("Sending: " + action)
+        msg = action
+        if len(payload_arg_0) > 0:
+            msg = action + " " + payload_arg_0
+
+    if len(msg) > 0:
+        prntr.printd("Sending: " + msg)
         c = udp_client(server_ip, server_port)
-        c.sendm(action)
+        c.sendm(msg)
