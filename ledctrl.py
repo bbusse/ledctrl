@@ -26,17 +26,17 @@ from systemd import journal
 server_ip = "127.0.0.1"
 server_port = 4223
 server_proto = "udp"
-#client_ip = "10.64.64.98"
-client_ip = "10.64.64.75"
+client_ip = "10.64.64.98"
+#client_ip = "10.64.64.75"
 client_port = 2342
 client_proto = "udp"
 # number of pixels in the x dimension
-dim_x = 19
+dim_x = 32
 # number of pixels in the y dimension
-dim_y = 1
-# effect to execute
-payload = "fade-colours"
-# info / warning / debug
+dim_y = 8
+# default payload: effect to execute
+payload = "cycle-lines"
+# loglevel: info / warning / debug
 loglevel = "debug"
 
 f2c = lambda f: int(f * 255.0) & 0xff
@@ -73,7 +73,12 @@ class server():
         self.sock = socket.socket(socket.AF_INET,
                                   socket.SOCK_DGRAM)
 
-        self.sock.bind((self.ip, self.port))
+        try:
+            self.sock.bind((self.ip, self.port))
+        except OSError as e:
+            print("Failed to bind socket: ", self.ip, self.port, e)
+            sys.exit(1)
+
         print("Serving on", self.ip, self.port)
 
     def receive(self):
@@ -110,7 +115,7 @@ class server():
 class matrix(server):
 
     state = "idle"
-    reverse_even_row = True
+    reverse_even_row = False
     status = "Reverse Pixel Order"
     frame_prev = []
 
@@ -133,15 +138,22 @@ class matrix(server):
         self.con = con
         self.dim_x = dim_x
         self.dim_y = dim_y
-        self.npx = dim_x * dim_y
+        self.npxm = dim_x * dim_y
         self.prntr = prntr
         self.sock = sock
 
+    def set_state(self, state):
+        self.state = state
+
     def exec_payload(self, data):
         args = data.split()
-        print(*args, sep='\n')
+        print(*args, sep='\t')
         payload = args.pop(0)
-        self.state = payload
+
+        if "set-colour" == self.state and "set-colour" == payload:
+            payload = "switch-colour"
+        else:
+            self.set_state(payload)
 
         self.prntr.printi("Executing payload: " + payload)
 
@@ -155,26 +167,30 @@ class matrix(server):
             self.set_payload(payload)
             self.set_colour(colour)
 
-        elif payload == "set-colour":
+        elif payload == "cycle":
             colour = "FF3399"
+            colour_bg = "000000"
             self.set_payload(payload)
-            if len(args) > 0:
+            self.cycle(colour, colour_bg, 0.1, 32)
+
+        elif payload == "set-colour" or payload == "switch-colour":
+            colour = "99FF66"
+            self.set_payload(payload)
+            if len(args) == 1:
                 if len(args[0]) == 6:
                     colour = args[0]
-
-            self.set_colour(colour)
+                    self.set_colour(colour, "000000", True, 32)
+            elif len(args) == 2:
+                if len(args[0]) == 6:
+                    colour = args[0]
+                    pos = args[1]
+                    self.prntr.printi("yo")
+                    if pos > -1 and pos <= self.npxm:
+                        self.set_px_colour(colour, pos, True)
 
         elif payload == "set-random-colour":
             self.set_payload(payload)
             self.set_random_colour()
-
-        elif payload == "grow_shrink_fade":
-            self.set_payload(payload)
-            self.grow_shrink_fade()
-
-        elif payload == "kitt":
-            self.set_payload(payload)
-            self.kitt()
 
         elif payload == "fade-colours":
             self.set_payload(payload)
@@ -204,6 +220,12 @@ class matrix(server):
             self.set_payload(payload)
             snake = snake_game(self.client_con, self.matrix)
 
+        elif payload == "cycle-lines":
+            colour = "FF3399"
+            colour_bg = "000000"
+            self.set_payload(payload)
+            self.cycle_lines(colour, colour_bg, 1)
+
         else:
             self.prntr.printi("There is no such command or payload")
             show_help()
@@ -230,7 +252,7 @@ class matrix(server):
         return rgb_to_hls(rgb[0], rgb[1], rgb[2])
 
     def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=0.1, steps=1000):
-        self.prntr.printi("Running payload: " + payload + " at speed: " + str(speed))
+        self.prntr.printi("Running payload: " + payload + " with colours: at speed: " + str(speed))
 
         for x in range(colours.__len__()):
             if not type(colours[x]) is int:
@@ -242,10 +264,11 @@ class matrix(server):
 
         while True:
             for x in range(colours.__len__()):
-                self.set_colour(colours[x])
                 if self.state != payload:
                     return
 
+                self.set_colour(colours[x])
+                self.prntr.printi("Current colour: " + colours[x])
                 time.sleep(speed)
 
             # reverse list
@@ -284,13 +307,40 @@ class matrix(server):
     def reset(self, colour="794044"):
         self.set_colour(colour)
 
-    def set_colour(self, colour="FFFFFF"):
+    def set_colour(self, colour="FFFFFF", colour_bg="000000", persist=False, npx=-1, offset=0):
         frame = []
+        #self.prntr.printi("\x1b[38;2;40;177;249m" + colour + "\x1b[0m")
+        self.prntr.printi("\x1b[38;2;40;177;249m" + colour + "\x1b[0m")
 
-        for x in range(self.npx):
-            frame.append(colour)
+        if 0 == npx:
+            self.prntr.printi("Number of pixels to set must not be 0")
+            return
+
+        # Set either all or number of selected pixels starting at offset
+        if npx > 0:
+            # Set selected pixels to colour
+            for x in range(self.npxm):
+                if  offset == x:
+                    frame.append(colour)
+                elif (x > offset) and (x < (offset + npx)):
+                    frame.append(colour)
+                else:
+                    frame.append(colour_bg)
+        else:
+            # Set all pixels to colour
+            for x in range(self.npxm):
+                frame.append(colour)
 
         self.draw(frame)
+
+        if True == persist:
+            while True:
+                self.prntr.printi("state: " + self.state + " payload: " + self.payload)
+                if self.state != self.payload:
+                    self.set_payload("set-colour")
+                    return
+
+                time.sleep(1)
 
     def set_random_colour(self, t_sleep=30):
 
@@ -304,12 +354,32 @@ class matrix(server):
         while True:
             frame = []
 
-            for x in range(self.npx):
+            self.prntr.printi("state: " + self.state + " payload: " + self.payload)
+            if self.state != "switch":
+                return
+
+            for x in range(self.npxm):
                 frame.append(self.colour_gen_hex_code())
 
             self.draw(frame)
             time.sleep(t_sleep)
             self.reset()
+
+    def cycle(self, colour, colour_bg, speed=0.1, npx=1):
+        while True:
+            for i in range(self.npxm):
+                if self.state != payload:
+                    return
+
+                if npx > -1:
+                    # Set npx pixels at once
+                    self.set_colour(colour, colour_bg, False, npx, i)
+                else:
+                    # Set a single pixel
+                    self.set_colour(colour, colour_bg, False, 1, 1)
+
+                self.prntr.printi("state: " + self.state + " payload: " + self.payload)
+                time.sleep(speed)
 
     def shift(self, list, n):
         for i in range(n):
@@ -317,27 +387,6 @@ class matrix(server):
             list.insert(0, t)
 
         return list
-
-    def grow_shrink_fade(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=1):
-        frame = []
-        pattern = []
-        pattern[0] = [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0]
-        pattern[1] = [0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0]
-        pattern[2] = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-        pattern[3] = [0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,0]
-
-        while True:
-
-            for y in range(4):
-                for x in range(self.npx):
-                    if pattern[y] == 0:
-                        frame.append(colours[0])
-                    else:
-                        frame.append(c_bg)
-
-            self.draw(frame)
-            colours = self.shift(colours)
-            time.sleep(speed)
 
     def show_rainbow(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=0.5):
 
@@ -360,8 +409,8 @@ class matrix(server):
         for x in range(colours.__len__()):
             frame.append(colours[x])
 
-        if self.npx > colours.__len__():
-            for x in range(colours.__len__(), self.npx):
+        if self.npxm > colours.__len__():
+            for x in range(colours.__len__(), self.npxm):
                 frame.append(c_bg)
 
         while True:
@@ -369,14 +418,6 @@ class matrix(server):
             self.draw(frame)
             frame = self.shift(frame, 1)
             time.sleep(speed)
-
-    def set_row(self, c):
-        m = ""
-
-        for x in range(self.dim_x):
-            m += c
-
-        return m
 
     def show_clock(self, c_h="ff0000", c_m="ff0000", c_bg="ffffff"):
 
@@ -388,7 +429,7 @@ class matrix(server):
             t_m1 = int(t_m[0:1])
             t_m2 = int(t_m[1:2])
 
-            for x in range(0, self.npx):
+            for x in range(0, self.npxm):
                 if x < t_h:
                     frame.append(c_h)
                 else:
@@ -398,7 +439,7 @@ class matrix(server):
             time.sleep(3)
             frame = []
 
-            for x in range(0, self.npx):
+            for x in range(0, self.npxm):
 
                 if x < 15 and x < t_m1:
                     frame.append(c_m)
@@ -410,34 +451,16 @@ class matrix(server):
             self.draw(frame)
             time.sleep(5)
 
-    def kitt(self, c_fg = ["ff4d4d", "ff1a1a", "cc0000", "ff1a1a", "ffd4d4"], c_bg="ffffff"):
-        row_fg = 3
-        m = ""
-        i = 0
-        dir = "right"
+    def move_lines(self, colour, colour_bg, speed):
+        for i in range(1, self.dim_y + 1):
+            offset = (i * self.dim_x) - self.dim_x
+            self.prntr.printi(str(i) + " " + str(self.dim_x) + " " + str(offset))
+            self.set_colour(colour, colour_bg, False, self.dim_x, offset)
+            time.sleep(speed)
 
+    def cycle_lines(self, colour, colour_bg, speed):
         while True:
-            for x in range(self.dim_y):
-                if row_fg == x + 1:
-                    for y in range(self.dim_x):
-                        if dir == "right":
-                            if (i == self.dim_x - 1):
-                                dir = "left"
-                                i = i - 1
-                            else:
-                                i = i + 1
-                        else:
-                            if (i == 0):
-                                dir = "right"
-                                i = i + 1
-                            else:
-                                i = i - 1
-                        m += c_fg[i]
-                else:
-                    m += self.set_row(c_bg)
-            self.con.send(m)
-            m = ""
-            time.sleep(1)
+            self.move_lines(colour, colour_bg, speed)
 
     def px_get_row(self, n):
         return math.ceil((n + 1) / dim_y)
@@ -451,7 +474,7 @@ class matrix(server):
         return ncol
 
     def scroll_text(self, text, speed=0.5, c_fg="ff0000", c_bg="ffffff", dir="left"):
-        nframes = text.__len__() * self.npx
+        nframes = text.__len__() * self.npxm
         start = 0
         t=[]
 
@@ -469,12 +492,12 @@ class matrix(server):
                         z = z + 5
                         p = t.pop(y)
                         print("Popped", y)
-                        if y >= self.npx:
-                            i = y - self.npx
+                        if y >= self.npxm:
+                            i = y - self.npxm
                             print("Inserting", i, p)
                             t.insert(i, p)
 
-                for y in range(self.npx):
+                for y in range(self.npxm):
                     if t[y] == "0":
                         c = c_bg
                     else:
@@ -485,7 +508,7 @@ class matrix(server):
 
 
             if dir == "up":
-                for y in range(self.npx):
+                for y in range(self.npxm):
                     if text[start+y]:
                         c = c_bg
                     else:
@@ -562,10 +585,10 @@ class matrix(server):
         msg = ""
 
         if self.reverse_even_row:
-            for x in range(0, self.npx):
+            for x in range(0, self.npxm):
                 msg += frame[self.px_layout.index(x)]
         else:
-            for x in range(0, self.npx):
+            for x in range(0, self.npxm):
                 msg += frame[x]
 
 
@@ -650,12 +673,21 @@ class udp_client():
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        self.prntr = printer()
 
     def send(self, m):
-        self.sock.sendto(bytes.fromhex(m), (self.ip, self.port))
+        try:
+            self.sock.sendto(bytes.fromhex(m), (self.ip, self.port))
+        except:
+            self.prntr.printi("Network unavailable. Aborting")
+            sys.exit(1)
 
     def sendm(self, m):
-        self.sock.sendto(bytes(m, "UTF-8"), (self.ip, self.port))
+        try:
+            self.sock.sendto(bytes(m, "UTF-8"), (self.ip, self.port))
+        except:
+            self.prntr.printi("Network unavailable. Aborting")
+            sys.exit(1)
 
 
 class kb_input():
@@ -709,7 +741,7 @@ class snake_game():
     def __init__(self, con, matrix, c_fg="ff0000", c_food="0000ff", c_bg="ffffff"):
         self.con = con
         self.matrix = matrix
-        npx = self.set_start_px()
+        npxm = self.set_start_px()
         self.c_fg = c_fg
         self.c_bg = c_bg
         self.c_food = c_food
@@ -753,7 +785,7 @@ class snake_game():
 
 
     def set_start_px(self):
-        px = random.randint(0, self.matrix.npx - 1)
+        px = random.randint(0, self.matrix.npxm - 1)
         self.px_snake.append(px)
         self.px_snake_head = px
         return px
@@ -774,7 +806,7 @@ class snake_game():
         elif dir == "down":
             px = self.px_snake_head + dim_y
 
-            if px > self.matrix.npx - 1:
+            if px > self.matrix.npxm - 1:
                 px = self.matrix.px_get_column(self.px_snake_head) - 1
 
         elif dir == "left":
@@ -790,8 +822,8 @@ class snake_game():
                 px = self.px_snake_head - dim_x -1
             else:
                 px = self.px_snake_head + 1
-            if px > self.matrix.npx:
-                px = self.matrix.npx - dim_x - 1
+            if px > self.matrix.npxm:
+                px = self.matrix.npxm - dim_x - 1
 
         if px in self.px_snake:
             self.game_over()
@@ -807,20 +839,20 @@ class snake_game():
 
         while is_occupied:
 
-            npx = random.randint(0, self.matrix.npx)
+            npxm = random.randint(0, self.matrix.npxm)
 
-            if not npx in self.px_food:
+            if not npxm in self.px_food:
                 is_occupied = False
 
-            if not npx in self.px_snake:
+            if not npxm in self.px_snake:
                 is_occupied = False
 
-        self.px_food.append(npx)
+        self.px_food.append(npxm)
 
     def get_frame(self):
         frame = []
 
-        for x in range(0, self.matrix.npx):
+        for x in range(0, self.matrix.npxm):
             if x in self.px_snake:
                 frame.append(self.c_fg)
             elif x in self.px_food:
@@ -976,6 +1008,9 @@ if __name__ == '__main__':
         if sys.argv.__len__() > 2:
             if len(sys.argv[2]) > 0:
                 payload_arg_0 = sys.argv[2]
+                if sys.argv.__len__() > 3:
+                    if len(sys.argv[3]) > 0:
+                        payload_arg_1 = sys.argv[3]
 
     sys.argv = []
 
