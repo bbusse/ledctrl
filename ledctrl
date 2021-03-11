@@ -22,7 +22,6 @@ import sys
 import termios
 import time
 from systemd import journal
-#import IN
 
 #server_ip = "::1"
 server_ip = "10.64.64.110"
