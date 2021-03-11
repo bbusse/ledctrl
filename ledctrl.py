@@ -8,7 +8,7 @@
 #  - python-systemd
 #
 # © 2016 Björn Busse (see also: LICENSE)
-# bbusse@baerlin.eu
+# bj.rn@baerlin.eu
 
 import logging
 import math
@@ -17,25 +17,27 @@ import random
 import socket
 import subprocess
 import signal
+import struct
 import sys
 import termios
 import time
 from systemd import journal
+#import IN
 
 #server_ip = "::1"
-server_ip = "127.0.0.1"
+server_ip = "10.64.64.110"
 server_port = 4223
 server_proto = "udp"
-client_ip = "10.64.64.98"
-#client_ip = "10.64.64.75"
+#client_ip = "10.64.64.98"
+client_ip = "10.64.64.71"
 client_port = 2342
 client_proto = "udp"
 # number of pixels in the x dimension
-dim_x = 32
+dim_x = 48
 # number of pixels in the y dimension
-dim_y = 8
+dim_y = 1
 # default payload: effect to execute
-payload = "cycle-lines"
+payload = "set-colour"
 # loglevel: info / warning / debug
 loglevel = "debug"
 
@@ -88,6 +90,7 @@ class server():
         try:
             data, (ip, port) = self.sock.recvfrom(1024, 0x40)
         except:
+            print("Failed to receive msg")
             pass
 
         if len(data) > 0:
@@ -109,7 +112,7 @@ class server():
             self.prntr.printi("Current payload: " + self.get_payload())
             return
 
-        self.exec_payload(data)
+        self.matrix.exec_payload(data)
 
 
 class matrix(server):
@@ -179,7 +182,7 @@ class matrix(server):
             if len(args) == 1:
                 if len(args[0]) == 6:
                     colour = args[0]
-                    self.set_colour(colour, "000000", True, 32)
+                    self.set_colour(colour, "000000", True, 256)
             elif len(args) == 2:
                 if len(args[0]) == 6:
                     colour = args[0]
@@ -211,6 +214,10 @@ class matrix(server):
         elif payload == "show-text":
             self.set_payload(payload)
             self.show_text("ledctrl")
+
+        elif payload == "show-image":
+            self.set_payload(payload)
+            self.show_image("e.bmp", "bitmap")
 
         elif payload == "show-clock":
             self.set_payload(payload)
@@ -264,9 +271,6 @@ class matrix(server):
 
         while True:
             for x in range(colours.__len__()):
-                if self.state != payload:
-                    return
-
                 self.set_colour(colours[x])
                 self.prntr.printi("Current colour: " + colours[x])
                 time.sleep(speed)
@@ -307,7 +311,7 @@ class matrix(server):
     def reset(self, colour="794044"):
         self.set_colour(colour)
 
-    def set_colour(self, colour="FFFFFF", colour_bg="000000", persist=False, npx=-1, offset=0):
+    def set_colour(self, colour="FFFFFF", colour_bg="000000", npx=23, offset=0):
         frame = []
         #self.prntr.printi("\x1b[38;2;40;177;249m" + colour + "\x1b[0m")
         self.prntr.printi("\x1b[38;2;40;177;249m" + colour + "\x1b[0m")
@@ -333,15 +337,6 @@ class matrix(server):
 
         self.draw(frame)
 
-        if True == persist:
-            while True:
-                self.prntr.printi("state: " + self.state + " payload: " + self.payload)
-                if self.state != self.payload:
-                    self.set_payload("set-colour")
-                    return
-
-                time.sleep(1)
-
     def set_random_colour(self, t_sleep=30):
 
         while True:
@@ -364,6 +359,14 @@ class matrix(server):
             self.draw(frame)
             time.sleep(t_sleep)
             self.reset()
+
+    def show_image(self, fn, type):
+        img = img_bitmap(fn, self.dim_x, self.dim_y)
+        img_data = img.read_file(fn)
+        img.print_header_data(fn)
+        bmp_frame = img.read_pixel_array(fn)
+        print(bmp_frame)
+        return
 
     def cycle(self, colour, colour_bg, speed=0.1, npx=1):
         while True:
@@ -388,7 +391,7 @@ class matrix(server):
 
         return list
 
-    def show_rainbow(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=0.5):
+    def show_rainbow(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=0.1):
 
         ncolours = colours.__len__()
 
@@ -594,8 +597,114 @@ class matrix(server):
 
         self.con.send(msg)
         super().receive()
-        #self.prntr.term_print(self.status)
-        #self.prntr.term_draw(msg)
+
+
+class img_bitmap():
+
+    def __init__(self, fn, x, y):
+        self.dim_x = x
+        self.dim_y = y
+        self.height = self.get_height(fn)
+        self.width = self.get_width(fn)
+
+    def colour_rgb_to_hex(self, rgb):
+        return ''.join(["%0.2X" % c for c in rgb])
+
+    def read_file(self, fn):
+        file = open(fn, "rb")
+        data = file.read()
+        file.close()
+        return data
+
+    def get_header_size(self, fn):
+        offset = 10
+        fh = open(fn, 'rb')
+        fh.seek(offset, 0)
+        pixel_array_offset = struct.unpack('I', fh.read(4))
+        return pixel_array_offset[0]
+
+    def get_height(self, fn):
+        offset = 10
+        fh = open(fn, 'rb')
+        fh.seek(offset, 0)
+        width = struct.unpack('I', fh.read(4))
+        return width[0]
+
+    def get_width(self, fn):
+        return 24
+
+    def read_pixel_array(self, fn):
+        fh = open(fn, "rb")
+
+        # Skip the DIB header (12-124)
+        header_size = self.get_header_size(fn)
+        fh.seek(header_size, 0)
+
+        # Pixels are stored starting at the bottom left
+        frame = []
+        rows = []
+        row = []
+        npx = 0
+
+        while True:
+            if npx == self.width:
+                npx = 0
+                rows.insert(0, row)
+                if len(row) != self.width * 3:
+                    raise Exception("Row length is not 32*3 but " + str(len(row)) + " / 3.0 = " + str(len(row) / 3.0))
+                row = []
+            npx += 1
+
+            r_str = fh.read(1)
+            g_str = fh.read(1)
+            b_str = fh.read(1)
+
+            if 0 == len(r_str):
+                # This is expected to happen when we've read everything.
+                if len(rows) != self.dim_y:
+                    print("Failed to parse pixel array of bitmap")
+                break
+
+            if 0 == len(g_str):
+                print("Got 0 length string for green. Aborting")
+                break
+
+            if 0 == len(b_str):
+                print("Got 0 length string for blue. Aborting")
+                break
+
+            r = ord(r_str)
+            g = ord(g_str)
+            b = ord(b_str)
+            row.append(b)
+            row.append(g)
+            row.append(r)
+            rgb = (r, g, b)
+
+            frame.append(self.colour_rgb_to_hex(rgb))
+
+        fh.close()
+        return frame
+
+    def print_header_data(self, fn):
+        bmp = open(fn, 'rb')
+        print('Type:', bmp.read(2).decode())
+        print('Size: %s' % struct.unpack('I', bmp.read(4)))
+        print('Reserved 1: %s' % struct.unpack('H', bmp.read(2)))
+        print('Reserved 2: %s' % struct.unpack('H', bmp.read(2)))
+        print('Offset: %s' % struct.unpack('I', bmp.read(4)))
+        print('DIB Header Size: %s' % struct.unpack('I', bmp.read(4)))
+        print('Width: %s' % struct.unpack('I', bmp.read(4)))
+        print('Height: %s' % struct.unpack('I', bmp.read(4)))
+        print('Colour Planes: %s' % struct.unpack('H', bmp.read(2)))
+        print('Bits per Pixel: %s' % struct.unpack('H', bmp.read(2)))
+        print('Compression Method: %s' % struct.unpack('I', bmp.read(4)))
+        print('Raw Image Size: %s' % struct.unpack('I', bmp.read(4)))
+        print('Horizontal Resolution: %s' % struct.unpack('I', bmp.read(4)))
+        print('Vertical Resolution: %s' % struct.unpack('I', bmp.read(4)))
+        print('Number of Colours: %s' % struct.unpack('I', bmp.read(4)))
+        print('Important Colours: %s' % struct.unpack('I', bmp.read(4)))
+        return
 
 
 class printer():
@@ -672,13 +781,16 @@ class udp_client():
         self.ip = ip
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #self.sock.setsockopt(socket.IPPROTO_IP, IN.IP_MTU_DISCOVER, IN.IP_PMTUDISC_WANT)
+        self.sock.setsockopt(socket.IPPROTO_IP, socket.SO_REUSEADDR, 1)
         #self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
         self.prntr = printer()
 
     def send(self, m):
         try:
             self.sock.sendto(bytes.fromhex(m), (self.ip, self.port))
-        except:
+        except Exception as e:
+            self.prntr.printi(str(e))
             self.prntr.printi("Network unavailable. Aborting")
             sys.exit(1)
 
@@ -915,8 +1027,7 @@ class service:
 
     def start(self, type="transient"):
         prntr.printi("Starting service: " + service_name)
-        cmd = 'systemd-run -t \
-                           --user \
+        cmd = 'systemd-run --user \
                            --unit=' + self.name + ' \
                            --description="' + self.desc + '" \
                            --remain-after-exit \
@@ -1000,6 +1111,7 @@ if __name__ == '__main__':
     prntr = printer(loglevel)
     cmd = sys.argv[0]
     action = ""
+    msg = ""
     payload_arg_0 = ""
 
     if sys.argv.__len__() > 1:
@@ -1015,7 +1127,7 @@ if __name__ == '__main__':
     sys.argv = []
 
     service_name = "ledctrl"
-    cmd_start = "/usr/src/ledctrl/ledctrl.py start"
+    cmd_start = "/usr/local/src/ledctrl/ledctrl.py start"
     service = service(service_name, cmd_start, "ledctrl server")
     service_state = service.get_state()
 
@@ -1039,6 +1151,11 @@ if __name__ == '__main__':
 
         server.matrix.exec_payload(payload)
 
+        while True:
+            time.sleep(1)
+            print("bla")
+            server.receive()
+
     if service_state == "not-found":
         service.start_transient()
 
@@ -1046,6 +1163,10 @@ if __name__ == '__main__':
         service.start_transient()
 
     elif service_state == "failed":
+        service.reset_failed()
+        service.restart()
+
+    elif service_state == "dead":
         service.reset_failed()
         service.restart()
 
