@@ -1127,7 +1127,7 @@ if __name__ == '__main__':
     sys.argv = []
 
     service_name = "ledctrl"
-    cmd_start = "/usr/local/src/ledctrl/ledctrl.py start"
+    cmd_start = "/usr/local/src/ledctrl/ledctrl start"
     service = service(service_name, cmd_start, "ledctrl server")
     service_state = service.get_state()
 
