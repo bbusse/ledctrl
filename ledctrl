@@ -230,7 +230,7 @@ class matrix(server):
             colour = "FF3399"
             colour_bg = "000000"
             self.set_payload(payload)
-            self.move_lines(colour, colour_bg, 1)
+            self.move_lines(colour, colour_bg, 0.08)
 
         else:
             self.prntr.printi("There is no such command or payload")
@@ -257,7 +257,7 @@ class matrix(server):
         rgb = self.colour_hex_to_rgb(c_hex)
         return rgb_to_hls(rgb[0], rgb[1], rgb[2])
 
-    def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=0.1, steps=1000):
+    def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=1, steps=1000):
         self.prntr.printi("Running payload: " + payload + " with colours: at speed: " + str(speed))
 
         for x in range(colours.__len__()):
@@ -293,7 +293,7 @@ class matrix(server):
                 g2 = c2f(green(colour2))
                 b2 = c2f(blue(colour2))
 
-                # generate a gradient of one step from colour to colour:
+                # Generate a gradient of one step from colour to colour:
                 delta = 1.0 / colours_per_step
                 for y in range(int(colours_per_step)):
                         t = y * delta
@@ -312,14 +312,10 @@ class matrix(server):
 
     def set_colour(self, colour="FFFFFF", colour_bg="000000", npx=23, offset=0):
         frame = []
-        #self.prntr.printi("\x1b[38;2;40;177;249m" + colour + "\x1b[0m")
-        self.prntr.printi("\x1b[38;2;40;177;249m" + colour + "\x1b[0m")
+        n = 2
+        rgb = self.colour_hex_to_rgb(colour)
+        self.prntr.printi("\x1b[38;" + str(rgb[0]) +";" + str(rgb[1]) + ";" + str(rgb[2]) + ";249m" + colour + "\x1b[0m " + colour)
 
-        if 0 == npx:
-            self.prntr.printi("Number of pixels to set must not be 0")
-            return
-
-        # Set either all or number of selected pixels starting at offset
         if npx > 0:
             # Set selected pixels to colour
             for x in range(self.npxm):
@@ -457,7 +453,6 @@ class matrix(server):
     # on last line
     def move_lines(self, colour, colour_bg, speed, reverse_direction=True):
         up = True
-        i = 1
 
         while True:
             for i in range(1, self.dim_y + 1):
@@ -465,7 +460,7 @@ class matrix(server):
                 # Move into one direction
                 if up:
                     j = i
-                    if 6 == i:
+                    if 6 == i and reverse_direction:
                         up = not up
                 # Reverse direction
                 else:
