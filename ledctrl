@@ -10,6 +10,8 @@
 # © 2016 Björn Busse (see also: LICENSE)
 # bj.rn@baerlin.eu
 
+from homekit import AccessoryServer
+from homekit.model import Accessory, LightBulbService
 import logging
 import math
 import os
@@ -64,6 +66,15 @@ class server():
         self.matrix = matrix(self.sock, dim_x, dim_y, self.client_con, self.prntr)
         self.matrix.reset()
 
+    def toggle_state(self):
+        '''
+        Toggle on/off state
+        '''
+        self.state = not self.state
+
+    def get_toggle_state(self):
+        return self.state
+
     def set_payload(self, payload):
         self.payload = payload
 
@@ -88,8 +99,8 @@ class server():
         # non-blocking (0x40)
         try:
             data, (ip, port) = self.sock.recvfrom(1024, 0x40)
-        except:
-            print("Failed to receive msg")
+        except Exception as e:
+            print("UDP receive: No data. Waiting for commands")
             pass
 
         if len(data) > 0:
@@ -116,7 +127,6 @@ class server():
 
 class matrix(server):
 
-    state = "idle"
     reverse_even_row = False
     status = "Reverse Pixel Order"
     frame_prev = []
@@ -143,41 +153,46 @@ class matrix(server):
         self.npxm = dim_x * dim_y
         self.prntr = prntr
         self.sock = sock
+        self.state = False
 
-    def set_state(self, state):
-        self.state = state
+    def get_payload(self):
+        return self.state
 
     def exec_payload(self, data):
         args = data.split()
         print(*args, sep='\t')
         payload = args.pop(0)
-
-        if "set-colour" == self.state and "set-colour" == payload:
-            payload = "switch-colour"
-        else:
-            self.set_state(payload)
+        self.set_payload(payload)
 
         self.prntr.printi("Executing payload: " + payload)
 
         if payload == "turn-on":
             colour = "FF3399"
-            self.set_payload(payload)
             self.set_colour(colour)
 
         elif payload == "turn-off":
             colour = "000000"
-            self.set_payload(payload)
             self.set_colour(colour)
+
+        elif payload == "toggle":
+            state = self.get_toggle_state()
+            self.prntr.printi("State: " + str(state))
+            if not state:
+                colour = "FF3399"
+                self.toggle_state()
+                self.set_colour(colour)
+            else:
+                colour = "000000"
+                self.toggle_state()
+                self.set_colour(colour)
 
         elif payload == "cycle":
             colour = "FF3399"
             colour_bg = "000000"
-            self.set_payload(payload)
             self.cycle(colour, colour_bg, 0.1, 32)
 
         elif payload == "set-colour" or payload == "switch-colour":
             colour = "99FF66"
-            self.set_payload(payload)
             if len(args) == 1:
                 if len(args[0]) == 6:
                     colour = args[0]
@@ -191,45 +206,35 @@ class matrix(server):
                         self.set_px_colour(colour, pos, True)
 
         elif payload == "set-random-colour":
-            self.set_payload(payload)
             self.set_random_colour()
 
         elif payload == "fade-colours":
-            self.set_payload(payload)
             self.colour_fade()
 
         elif payload == "show-snake":
-            self.set_payload(payload)
             self.show_rainbow_snake()
 
         elif payload == "show-rainbow":
-            self.set_payload(payload)
             self.show_rainbow()
 
         elif payload == "set-random-pixel":
-            self.set_payload(payload)
             self.set_random_pixel()
 
         elif payload == "show-text":
-            self.set_payload(payload)
             self.show_text("ledctrl")
 
         elif payload == "show-image":
-            self.set_payload(payload)
             self.show_image("e.bmp", "bitmap")
 
         elif payload == "show-clock":
-            self.set_payload(payload)
             self.show_clock()
 
         elif payload == "play-snake":
-            self.set_payload(payload)
             snake = snake_game(self.client_con, self.matrix)
 
         elif payload == "cycle-lines":
             colour = "FF3399"
             colour_bg = "000000"
-            self.set_payload(payload)
             self.move_lines(colour, colour_bg, 0.08)
 
         else:
@@ -452,6 +457,13 @@ class matrix(server):
     # reverse_direction: Do not jump to line 1 but go backwards
     # on last line
     def move_lines(self, colour, colour_bg, speed, reverse_direction=True):
+        '''
+        Draw lines of variable length at some offset
+        :param str colour: The colour of the line
+        :param str colour_bg: The background colour
+        :param float speed: The refresh rate
+        :param bool reverse_direction: Reverse moving direction, defaults to True
+        '''
         up = True
 
         while True:
@@ -1023,7 +1035,7 @@ class service:
             if hasattr(p, 'stdout') and p.stdout != None:
                 r = p.stdout.strip('\n')
 
-        if r == "Unit ledctrl.service could not be found.":
+        if r == "Unit " + self.name + ".service could not be found.":
             return "not-found"
 
         # remove 'SubState=' from string
@@ -1032,11 +1044,43 @@ class service:
 
         return r
 
+    def check(self):
+        service_state = self.get_state()
+
+        if service_state == False:
+            prntr.printi("Could not determine service state")
+        else:
+            prntr.printi(self.name + " service state: " + service_state)
+
+        if service_state == "not-found":
+            self.start_transient()
+
+        elif service_state == "exited":
+            self.start_transient()
+
+        elif service_state == "failed":
+            self.reset_failed()
+            self.restart()
+
+        elif service_state == "dead":
+            #self.reset_failed()
+            #self.restart()
+            self.start_transient()
+            self.start_transient()
+
+        elif service_state == "running":
+            prntr.printi("Service is running")
+
+            if "stop" == action:
+                prntr.printi("Stopping " + self.name + " service")
+                self.stop()
+                exit(0)
+
     def start_transient(self):
         self.start("transient")
 
     def start(self, type="transient"):
-        prntr.printi("Starting service: " + service_name)
+        prntr.printi("Starting service: " + self.name)
         cmd = 'systemd-run --user \
                            --unit=' + self.name + ' \
                            --description="' + self.desc + '" \
@@ -1048,15 +1092,15 @@ class service:
         cmd = ' '.join(cmd.split())
 
         p = self.run_cmd(cmd, shell=False, stdout=False, stderr=False)
-        if p.stdout.strip('\n') == "Failed to start transient service unit: Unit ledctrl.service already exists.":
+        if p.stdout.strip('\n') == "Failed to start transient service unit: Unit " + self.name + " already exists.":
             self.restart()
 
     def restart(self):
-        prntr.printi("Restarting service: " + service_name)
+        prntr.printi("Restarting service: " + self.name)
         cmd = 'systemctl --user restart ' + self.name
         p = self.run_cmd(cmd)
 
-        if p.stdout.strip('\n') == "Failed to restart ledctrl.service: Unit ledctrl.service not found.":
+        if p.stdout.strip('\n') == "Failed to restart " + self.name + " unit. " + self.name + ".service not found.":
             self.prntr.printi("Restart failed. Trying to start " + self.name)
             self.start()
 
@@ -1093,6 +1137,31 @@ class service:
            return False
 
         return p
+
+
+class homekit():
+
+    def toggle(self, value):
+        c = udp_client(server_ip, server_port)
+        c.sendm("toggle")
+
+    def homekit_add_accessory(self):
+        try:
+            httpd = AccessoryServer(os.path.expanduser('~/.config/homekit/lightbulb-0.json'))
+
+            accessory = Accessory('test_light', 'homekit_python', 'Demoserver', '0001', '0.1')
+            lightService = LightBulbService()
+            lightService.set_on_set_callback(self.toggle)
+            accessory.services.append(lightService)
+            httpd.accessories.add_accessory(accessory)
+
+            httpd.publish_device()
+            print('Published HomeKit device')
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print('Unpublish HomeKit device')
+            httpd.unpublish_device()
+
 
 def show_help():
     print("\n  Usage:")
@@ -1138,17 +1207,21 @@ if __name__ == '__main__':
 
     service_name = "ledctrl"
     cmd_start = "/usr/local/src/ledctrl/ledctrl start"
-    service = service(service_name, cmd_start, "ledctrl server")
-    service_state = service.get_state()
+    service_ledctrl = service(service_name, cmd_start, "ledctrl server")
+    service_ledctrl.check()
 
-    if service_state == False:
-        prntr.printi("Could not determine service state")
-    else:
-        prntr.printi(service_name + " service state: " + service_state)
+    service_name_homekit = "ledctrl-homekit"
+    cmd_start_homekit = "/usr/local/src/ledctrl/ledctrl homekit"
+    service_homekit = service(service_name_homekit, cmd_start_homekit, "ledctrl homekit server")
+    service_homekit.check()
 
     if "help" == action:
         show_help()
         exit(0)
+
+    if "homekit" == action:
+        hk = homekit()
+        hk.homekit_add_accessory()
 
     if "start" == action:
         server = server(server_proto,
@@ -1163,30 +1236,7 @@ if __name__ == '__main__':
 
         while True:
             time.sleep(1)
-            print("bla")
             server.receive()
-
-    if service_state == "not-found":
-        service.start_transient()
-
-    elif service_state == "exited":
-        service.start_transient()
-
-    elif service_state == "failed":
-        service.reset_failed()
-        service.restart()
-
-    elif service_state == "dead":
-        service.reset_failed()
-        service.restart()
-
-    elif service_state == "running":
-        prntr.printi("Service is running and listening on " + str(server_port))
-
-        if "stop" == action:
-            prntr.printi("Stopping ledctrl service")
-            service.stop()
-            exit(0)
 
     if len(action) > 0:
         msg = action

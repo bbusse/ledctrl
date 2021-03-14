@@ -1,6 +1,6 @@
 # ledctrl
 
-A daemon and client to control LEDs or  
+A HomeKit enabled daemon and client to control LEDs or  
 LED "displays"  
   
 It is currently primarily used to send frames  
@@ -27,3 +27,4 @@ Use 'ledctrl help' to get a usage overview.
 
 Python3
 python-systemd
+homekit_python
