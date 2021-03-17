@@ -100,7 +100,7 @@ class Server():
         # non-blocking (0x40)
         try:
             data, (ip, port) = self.sock.recvfrom(1024, 0x40)
-        except Exception as e:
+        except:
             print("UDP receive: No data. Waiting for commands")
             pass
 
@@ -249,7 +249,7 @@ class Matrix(server):
             self.show_clock()
 
         elif payload == "play-snake":
-            snake = SnakeGame(self.client_con, self.matrix)
+            SnakeGame(self.client_con, self.matrix)
 
         elif payload == "cycle-lines":
             colour = "FF3399"
@@ -336,7 +336,6 @@ class Matrix(server):
 
     def set_colour(self, colour="FFFFFF", colour_bg="000000", npx=23, offset=0):
         frame = []
-        n = 2
         rgb = self.colour_hex_to_rgb(colour)
         self.prntr.printi("\x1b[38;" + str(rgb[0]) +";"
                                      + str(rgb[1]) + ";"
@@ -383,7 +382,7 @@ class Matrix(server):
             time.sleep(t_sleep)
             self.reset()
 
-    def show_image(self, fn, type):
+    def show_image(self, fn):
         img = Bitmap(fn, self.dim_x, self.dim_y)
         img_data = img.read_file(fn)
         img.print_header_data(fn)
@@ -422,8 +421,6 @@ class Matrix(server):
                                       "228b22",
                                       "ffff00"],
                                       speed=0.1):
-
-        ncolours = colours.__len__()
 
         while True:
             frame = []
@@ -465,7 +462,6 @@ class Matrix(server):
 
         while True:
             frame = []
-            t = time.strftime("%H:%M")
             t_h = int(time.strftime("%H"))
             t_m = time.strftime("%M")
             t_m1 = int(t_m[0:1])
@@ -605,7 +601,7 @@ class Matrix(server):
                 self.font_show_char(s[x])
                 time.sleep(t_sleep)
 
-    def font_get_char(self, c, font="f5x5"):
+    def font_get_char(self, c):
         f5x5 = {"A" : "0010001010011100101001010",
                 "B" : "1111010001111101000111110",
                 "C" : "0111110000100001000001111",
@@ -645,7 +641,6 @@ class Matrix(server):
         self.draw(frame)
 
     def draw(self, frame):
-        msg_lst = []
         msg = ""
 
         if self.reverse_even_row:
