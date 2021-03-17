@@ -1017,7 +1017,7 @@ class SnakeGame():
     def game_over(self):
         self.matrix.set_colour("FF0000")
         print("Game Over \:")
-        quit()
+        sys.exit()
 
 
 class HandleSignals:
@@ -1092,7 +1092,7 @@ class Service:
             if "stop" == action:
                 prntr.printi("Stopping " + self.name + " service")
                 self.stop()
-                exit(0)
+                sys.exit(0)
 
     def start_transient(self):
         self.start("transient")
@@ -1235,7 +1235,7 @@ if __name__ == '__main__':
 
     if "help" == action:
         show_help()
-        exit(0)
+        sys.exit(0)
 
     if "homekit" == action:
         hk = Homekit()
