@@ -66,6 +66,7 @@ class Server():
         self.matrix = Matrix(self.sock, dim_x, dim_y, self.client_con, self.prntr)
         self.matrix.reset()
         self.state = False
+        self.payload = ""
 
     def toggle_state(self):
         '''
@@ -285,7 +286,7 @@ class Matrix(Server):
         self.prntr.printi("Running payload: " + payload + " with colours: at speed: " + str(speed))
 
         for x in range(colours.__len__()):
-            if not type(colours[x]) is int:
+            if isinstance(colours[x], int):
                 c = "0xff" + colours[x]
                 colours[x] = int(c, 16)
 
@@ -337,10 +338,10 @@ class Matrix(Server):
     def set_colour(self, colour="FFFFFF", colour_bg="000000", npx=23, offset=0):
         frame = []
         rgb = self.colour_hex_to_rgb(colour)
-        self.prntr.printi("\x1b[38;" + str(rgb[0]) +";"
+        self.prntr.printi("\x1b[38;" + str(rgb[0]) + ";"
                                      + str(rgb[1]) + ";"
                                      + str(rgb[2]) + ";249m"
-                                     + colour + "\x1b[0m "
+                                     + colour + "\x1b[0m"
                                      + colour)
 
         if npx > 0:
@@ -348,7 +349,7 @@ class Matrix(Server):
             for x in range(self.npxm):
                 if  offset == x:
                     frame.append(colour)
-                elif (x > offset) and (x < (offset + npx)):
+                elif x > offset < (offset + npx):
                     frame.append(colour)
                 else:
                     frame.append(colour_bg)
@@ -870,6 +871,7 @@ class KeyInput():
         new_settings[6][termios.VMIN] = 0
         new_settings[6][termios.VTIME] = 0
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
+        self.ch = ""
 
     def get_key(self):
         self.ch = os.read(sys.stdin.fileno(), 3)
