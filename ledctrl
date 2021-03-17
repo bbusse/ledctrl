@@ -60,11 +60,12 @@ class Server():
         self.server_proto = server_proto
         self.serve()
 
-        sh = handle_signals()
+        sh = HandleSignals()
         self.prntr = Printer()
 
         self.matrix = Matrix(self.sock, dim_x, dim_y, self.client_con, self.prntr)
         self.matrix.reset()
+        self.state = False
 
     def toggle_state(self):
         '''
@@ -490,12 +491,12 @@ class Matrix(server):
                 # Move into one direction
                 if up:
                     j = i
-                    if 6 == i and reverse_direction:
+                    if i == 6 and reverse_direction:
                         up = not up
                 # Reverse direction
                 else:
                     j = self.dim_y - i
-                    if 1 == j:
+                    if j == 1:
                         i = 2
                         up = not up
                         break
@@ -699,17 +700,17 @@ class Bitmap():
             g_str = fh.read(1)
             b_str = fh.read(1)
 
-            if 0 == len(r_str):
+            if len(r_str) == 0:
                 # This is expected to happen when we've read everything.
                 if len(rows) != self.dim_y:
                     print("Failed to parse pixel array of bitmap")
                 break
 
-            if 0 == len(g_str):
+            if len(g_str) == 0:
                 print("Got 0 length string for green. Aborting")
                 break
 
-            if 0 == len(b_str):
+            if len(b_str) == 0:
                 print("Got 0 length string for blue. Aborting")
                 break
 
@@ -744,7 +745,6 @@ class Bitmap():
         print('Vertical Resolution: %s' % struct.unpack('I', bmp.read(4)))
         print('Number of Colours: %s' % struct.unpack('I', bmp.read(4)))
         print('Important Colours: %s' % struct.unpack('I', bmp.read(4)))
-        return
 
 
 class Printer():
@@ -859,7 +859,7 @@ class KeyInput():
     def get_key(self):
         self.ch = os.read(sys.stdin.fileno(), 3)
 
-        if self.ch != None and len(self.ch) > 0:
+        if self.ch is not None and len(self.ch) > 0:
             self.ch_set.append(self.ch)
 
         return self.ch
@@ -911,7 +911,7 @@ class SnakeGame():
 
             key = self.kb.get_key_parsed()
 
-            if key != None and len(key) > 0:
+            if key is not None and len(key) > 0:
 
                 if key  == 'up':
                     direction = "up"
@@ -1016,7 +1016,7 @@ class SnakeGame():
 
     def game_over(self):
         self.matrix.set_colour("FF0000")
-        print("Game Over \:")
+        print("Game Over")
         sys.exit()
 
 
@@ -1049,8 +1049,8 @@ class Service:
         p = self.run_cmd(cmd)
         r = "unknown"
 
-        if p != False:
-            if hasattr(p, 'stdout') and p.stdout != None:
+        if p:
+            if hasattr(p, 'stdout') and p.stdout is not None:
                 r = p.stdout.strip('\n')
 
         if r == "Unit " + self.name + ".service could not be found.":
@@ -1065,7 +1065,7 @@ class Service:
     def check(self):
         service_state = self.get_state()
 
-        if service_state == False:
+        if not service_state:
             prntr.printi("Could not determine service state")
         else:
             prntr.printi(self.name + " service state: " + service_state)
@@ -1089,7 +1089,7 @@ class Service:
         elif service_state == "running":
             prntr.printi("Service is running")
 
-            if "stop" == action:
+            if action == "stop":
                 prntr.printi("Stopping " + self.name + " service")
                 self.stop()
                 sys.exit(0)
@@ -1233,15 +1233,15 @@ if __name__ == '__main__':
     service_homekit = Service(service_name_homekit, cmd_start_homekit, "ledctrl homekit server")
     service_homekit.check()
 
-    if "help" == action:
+    if action == "help":
         show_help()
         sys.exit(0)
 
-    if "homekit" == action:
+    if action == "homekit":
         hk = Homekit()
         hk.homekit_add_accessory()
 
-    if "start" == action:
+    if action == "start":
         server = Server(server_proto,
                         server_ip,
                         server_port,
@@ -1263,5 +1263,5 @@ if __name__ == '__main__':
 
     if len(msg) > 0:
         prntr.printd("Sending: " + msg)
-        c = UDPVlient(server_ip, server_port)
+        c = UDPClient(server_ip, server_port)
         c.sendm(msg)
