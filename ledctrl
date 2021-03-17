@@ -126,7 +126,7 @@ class Server():
         self.matrix.exec_payload(data)
 
 
-class Matrix(server):
+class Matrix(Server):
 
     reverse_even_row = False
     status = "Reverse Pixel Order"
@@ -210,7 +210,7 @@ class Matrix(server):
             colour_bg = "000000"
             self.cycle(colour, colour_bg, 0.1, 32)
 
-        elif payload == "set-colour" or payload == "switch-colour":
+        elif payload in ['set-colour', 'switch-colour']:
             colour = "99FF66"
             if len(args) == 1:
                 if len(args[0]) == 6:
@@ -221,7 +221,7 @@ class Matrix(server):
                     colour = args[0]
                     pos = args[1]
                     self.prntr.printi("yo")
-                    if pos > -1 and pos <= self.npxm:
+                    if pos > -1 <= self.npxm:
                         self.set_px_colour(colour, pos, True)
 
         elif payload == "set-random-colour":
@@ -481,7 +481,7 @@ class Matrix(server):
 
                 if x < 15 and x < t_m1:
                     frame.append(c_m)
-                elif x > 14 and x < (t_m2 + 15):
+                elif x > 14 < (t_m2 + 15):
                     frame.append(c_m)
                 else:
                     frame.append(c_bg)
