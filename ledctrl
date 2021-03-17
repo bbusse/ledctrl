@@ -10,8 +10,6 @@
 # © 2016 Björn Busse (see also: LICENSE)
 # bj.rn@baerlin.eu
 
-from homekit import AccessoryServer
-from homekit.model import Accessory, LightBulbService
 import logging
 import math
 import os
@@ -24,6 +22,8 @@ import sys
 import termios
 import time
 from systemd import journal
+from homekit import AccessoryServer
+from homekit.model import Accessory, LightBulbService
 
 #server_ip = "::1"
 server_ip = "10.64.64.110"
