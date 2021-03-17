@@ -1000,7 +1000,7 @@ class SnakeGame():
         if px in self.px_snake:
             self.game_over()
 
-        if not px in self.px_food:
+        if px not in self.px_food:
             self.px_snake.pop(0)
 
         self.px_snake.append(px)
@@ -1013,10 +1013,10 @@ class SnakeGame():
 
             npxm = random.randint(0, self.matrix.npxm)
 
-            if not npxm in self.px_food:
+            if npxm not in self.px_food:
                 is_occupied = False
 
-            if not npxm in self.px_snake:
+            if npxm not in self.px_snake:
                 is_occupied = False
 
         self.px_food.append(npxm)
