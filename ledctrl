@@ -338,7 +338,11 @@ class Matrix(server):
         frame = []
         n = 2
         rgb = self.colour_hex_to_rgb(colour)
-        self.prntr.printi("\x1b[38;" + str(rgb[0]) +";" + str(rgb[1]) + ";" + str(rgb[2]) + ";249m" + colour + "\x1b[0m " + colour)
+        self.prntr.printi("\x1b[38;" + str(rgb[0]) +";"
+                                     + str(rgb[1]) + ";"
+                                     + str(rgb[2]) + ";249m"
+                                     + colour + "\x1b[0m "
+                                     + colour)
 
         if npx > 0:
             # Set selected pixels to colour
@@ -410,7 +414,14 @@ class Matrix(server):
 
         return list
 
-    def show_rainbow(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], speed=0.1):
+    def show_rainbow(self, colours = ["ffa500",
+                                      "ff4500",
+                                      "8a2be2",
+                                      "0000ff",
+                                      "7fffd4",
+                                      "228b22",
+                                      "ffff00"],
+                                      speed=0.1):
 
         ncolours = colours.__len__()
 
@@ -425,7 +436,16 @@ class Matrix(server):
             colours = self.shift(colours, 1)
             time.sleep(speed)
 
-    def show_rainbow_snake(self, colours = ["ffa500", "ff4500", "8a2be2", "0000ff", "7fffd4", "228b22", "ffff00"], c_bg="444444", speed=1):
+    def show_rainbow_snake(self, colours = ["ffa500",
+                                            "ff4500",
+                                            "8a2be2",
+                                            "0000ff",
+                                            "7fffd4",
+                                            "228b22",
+                                            "ffff00"],
+                                            c_bg="444444",
+                                            speed=1):
+
         frame = []
 
         for x in range(colours.__len__()):
@@ -692,7 +712,7 @@ class Bitmap():
                 npx = 0
                 rows.insert(0, row)
                 if len(row) != self.width * 3:
-                    raise Exception("Row length is not 32*3 but " + str(len(row)) + " / 3.0 = " + str(len(row) / 3.0))
+                    raise Exception("Unsupported row length")
                 row = []
             npx += 1
 
@@ -1119,7 +1139,7 @@ class Service:
         p = self.run_cmd(cmd)
 
         if p.stdout.strip('\n') == "Failed to restart " + self.name + " unit. " + self.name + ".service not found.":
-            self.prntr.printi("Restart failed. Trying to start " + self.name)
+            self.prntr.printi("Restart failed. Trying to start "+ self.name)
             self.start()
 
     def stop(self):
@@ -1130,7 +1150,12 @@ class Service:
         cmd = 'systemctl --user reset-failed ' + self.name
         self.run_cmd(cmd)
 
-    def run_cmd(self, cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True):
+    def run_cmd(self, cmd,
+                      shell=True,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.STDOUT,
+                      universal_newlines=True):
+
         self.prntr.printd("Executing: " + cmd)
 
         try:
