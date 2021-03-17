@@ -51,19 +51,19 @@ blue = lambda c: c & 0xff
 pack = lambda a, r, g, b: (f2c(a) << 24) | (f2c(r) << 16) | (f2c(g) << 8) | f2c(b)
 
 
-class server():
+class Server():
 
     def __init__(self, server_proto, server_ip, server_port, client_ip, client_port, dim_x, dim_y):
         self.ip = server_ip
         self.port = server_port
-        self.client_con = udp_client(client_ip, client_port)
+        self.client_con = UDPClient(client_ip, client_port)
         self.server_proto = server_proto
         self.serve()
 
         sh = handle_signals()
-        self.prntr = printer()
+        self.prntr = Printer()
 
-        self.matrix = matrix(self.sock, dim_x, dim_y, self.client_con, self.prntr)
+        self.matrix = Matrix(self.sock, dim_x, dim_y, self.client_con, self.prntr)
         self.matrix.reset()
 
     def toggle_state(self):
@@ -125,7 +125,7 @@ class server():
         self.matrix.exec_payload(data)
 
 
-class matrix(server):
+class Matrix(server):
 
     reverse_even_row = False
     status = "Reverse Pixel Order"
@@ -230,7 +230,7 @@ class matrix(server):
             self.show_clock()
 
         elif payload == "play-snake":
-            snake = snake_game(self.client_con, self.matrix)
+            snake = SnakeGame(self.client_con, self.matrix)
 
         elif payload == "cycle-lines":
             colour = "FF3399"
@@ -361,7 +361,7 @@ class matrix(server):
             self.reset()
 
     def show_image(self, fn, type):
-        img = img_bitmap(fn, self.dim_x, self.dim_y)
+        img = Bitmap(fn, self.dim_x, self.dim_y)
         img_data = img.read_file(fn)
         img.print_header_data(fn)
         bmp_frame = img.read_pixel_array(fn)
@@ -621,7 +621,7 @@ class matrix(server):
         super().receive()
 
 
-class img_bitmap():
+class Bitmap():
 
     def __init__(self, fn, x, y):
         self.dim_x = x
@@ -729,7 +729,7 @@ class img_bitmap():
         return
 
 
-class printer():
+class Printer():
 
     buf = ""
 
@@ -797,7 +797,7 @@ class printer():
         print(chr(27) + "[2J")
 
 
-class udp_client():
+class UDPClient():
 
     def __init__(self, ip, port):
         self.ip = ip
@@ -806,7 +806,7 @@ class udp_client():
         #self.sock.setsockopt(socket.IPPROTO_IP, IN.IP_MTU_DISCOVER, IN.IP_PMTUDISC_WANT)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.SO_REUSEADDR, 1)
         #self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-        self.prntr = printer()
+        self.prntr = Printer()
 
     def send(self, m):
         try:
@@ -824,7 +824,7 @@ class udp_client():
             sys.exit(1)
 
 
-class kb_input():
+class KeyInput():
 
     old_settings = None
 
@@ -864,7 +864,7 @@ class kb_input():
           termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 
-class snake_game():
+class SnakeGame():
 
     px_snake = []
     px_food = []
@@ -879,7 +879,7 @@ class snake_game():
         self.c_fg = c_fg
         self.c_bg = c_bg
         self.c_food = c_food
-        self.kb = kb_input()
+        self.kb = KeyInput()
         self.matrix.draw(self.get_frame())
         dirs = ["up", "down", "left", "right"]
         direction = random.choice(dirs)
@@ -1002,12 +1002,12 @@ class snake_game():
         quit()
 
 
-class handle_signals:
+class HandleSignals:
 
     def __init__(self):
         self.original_sigint = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, self.shutdown)
-        self.prntr = printer()
+        self.prntr = Printer()
 
     def restore(self):
         signal.signal(signal.SIGINT, self.original_sigint)
@@ -1018,13 +1018,13 @@ class handle_signals:
         sys.exit(1)
 
 
-class service:
+class Service:
 
     def __init__(self, name, cmd_start, desc, loglevel="debug"):
         self.name = name
         self.cmd_start = cmd_start
         self.desc = desc
-        self.prntr = printer(loglevel)
+        self.prntr = Printer(loglevel)
 
     def get_state(self):
         cmd = "systemctl --user show -p SubState " + self.name
@@ -1139,10 +1139,10 @@ class service:
         return p
 
 
-class homekit():
+class Homekit():
 
     def toggle(self, value):
-        c = udp_client(server_ip, server_port)
+        c = UDPClient(server_ip, server_port)
         c.sendm("toggle")
 
     def homekit_add_accessory(self):
@@ -1187,7 +1187,7 @@ if __name__ == '__main__':
     #JournalHandler(SYSLOG_IDENTIFIER='ledctrl')
     #log.warning("Some message: %s", 'detail')
 
-    prntr = printer(loglevel)
+    prntr = Printer(loglevel)
     cmd = sys.argv[0]
     action = ""
     msg = ""
@@ -1207,12 +1207,12 @@ if __name__ == '__main__':
 
     service_name = "ledctrl"
     cmd_start = "/usr/local/src/ledctrl/ledctrl start"
-    service_ledctrl = service(service_name, cmd_start, "ledctrl server")
+    service_ledctrl = Service(service_name, cmd_start, "ledctrl server")
     service_ledctrl.check()
 
     service_name_homekit = "ledctrl-homekit"
     cmd_start_homekit = "/usr/local/src/ledctrl/ledctrl homekit"
-    service_homekit = service(service_name_homekit, cmd_start_homekit, "ledctrl homekit server")
+    service_homekit = Service(service_name_homekit, cmd_start_homekit, "ledctrl homekit server")
     service_homekit.check()
 
     if "help" == action:
@@ -1220,11 +1220,11 @@ if __name__ == '__main__':
         exit(0)
 
     if "homekit" == action:
-        hk = homekit()
+        hk = Homekit()
         hk.homekit_add_accessory()
 
     if "start" == action:
-        server = server(server_proto,
+        server = Server(server_proto,
                         server_ip,
                         server_port,
                         client_ip,
@@ -1245,5 +1245,5 @@ if __name__ == '__main__':
 
     if len(msg) > 0:
         prntr.printd("Sending: " + msg)
-        c = udp_client(server_ip, server_port)
+        c = UDPVlient(server_ip, server_port)
         c.sendm(msg)
