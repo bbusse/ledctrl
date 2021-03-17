@@ -137,14 +137,32 @@ class Matrix(server):
                  19, 18, 17, 16, 15,
                  20, 21, 22, 23, 24]
 
-    px_layout = [  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23 , 24,  25,  26,  27,  28,  29 , 30,  31,
-                  63,  62,  61,  60,  59,  58,  57,  56,  55,  54,  53,  52,  51,  50,  49,  48  ,47 , 46,  45,  44,  43,  42,  41,  40,  39,  38,  37,  36,  35,  34,  33,  32,
-                  64,  65,  66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,
-                 127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112, 111, 110, 109, 108, 107, 106, 105, 104, 103, 102, 101, 100,  99,  98,  97,  96,
-                 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
-                 191, 190, 189, 188, 187, 186, 185, 184, 183, 182, 181, 180, 179, 178, 177, 176, 175, 174, 173, 172, 171, 170, 169, 168, 167, 166, 165, 164, 163, 162, 161, 160,
-                 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
-                 255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 225, 224]
+    px_layout = [  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,
+                  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,
+                  20,  21,  22,  23 , 24,  25,  26,  27,  28,  29,
+                  30,  31,  63,  62,  61,  60,  59,  58,  57,  56,
+                  55,  54,  53,  52,  51,  50,  49,  48,  47 , 46,
+                  45,  44,  43,  42,  41,  40,  39,  38,  37,  36,
+                  35,  34,  33,  32,  64,  65,  66,  67,  68,  69,
+                  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,
+                  80,  81,  82,  83,  84,  85,  86,  87,  88,  89,
+                  90,  91,  92,  93,  94,  95, 127, 126, 125, 124,
+                 123, 122, 121, 120, 119, 118, 117, 116, 115, 114,
+                 113, 112, 111, 110, 109, 108, 107, 106, 105, 104,
+                 103, 102, 101, 100,  99,  98,  97,  96, 128, 129,
+                 130, 131, 132, 133, 134, 135, 136, 137, 138, 139,
+                 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+                 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
+                 191, 190, 189, 188, 187, 186, 185, 184, 183, 182,
+                 181, 180, 179, 178, 177, 176, 175, 174, 173, 172,
+                 171, 170, 169, 168, 167, 166, 165, 164, 163, 162,
+                 161, 160, 192, 193, 194, 195, 196, 197, 198, 199,
+                 200, 201, 202, 203, 204, 205, 206, 207, 208, 209,
+                 210, 211, 212, 213, 214, 215, 216, 217, 218, 219,
+                 220, 221, 222, 223, 255, 254, 253, 252, 251, 250,
+                 249, 248, 247, 246, 245, 244, 243, 242, 241, 240,
+                 239, 238, 237, 236, 235, 234, 233, 232, 231, 230,
+                 229, 228, 227, 226, 225, 224]
 
     def __init__(self, sock, dim_x, dim_y, con, prntr):
         self.con = con
@@ -288,27 +306,27 @@ class Matrix(server):
 
         for x, colour in enumerate(colours):
 
-                r1 = c2f(red(colour))
-                g1 = c2f(green(colour))
-                b1 = c2f(blue(colour))
+            r1 = c2f(red(colour))
+            g1 = c2f(green(colour))
+            b1 = c2f(blue(colour))
 
-                colour2 = colours[(x + 1) % len(colours)]
+            colour2 = colours[(x + 1) % len(colours)]
 
-                r2 = c2f(red(colour2))
-                g2 = c2f(green(colour2))
-                b2 = c2f(blue(colour2))
+            r2 = c2f(red(colour2))
+            g2 = c2f(green(colour2))
+            b2 = c2f(blue(colour2))
 
-                # Generate a gradient of one step from colour to colour:
-                delta = 1.0 / colours_per_step
-                for y in range(int(colours_per_step)):
-                        t = y * delta
-                        a = 1.0
-                        r = (1.0 - t) * r1 + t * r2
-                        g = (1.0 - t) * g1 + t * g2
-                        b = (1.0 - t) * b1 + t * b2
+            # Generate a gradient of one step from colour to colour:
+            delta = 1.0 / colours_per_step
+            for y in range(int(colours_per_step)):
+                t = y * delta
+                a = 1.0
+                r = (1.0 - t) * r1 + t * r2
+                g = (1.0 - t) * g1 + t * g2
+                b = (1.0 - t) * b1 + t * b2
 
-                        c = '0x{0:x}'.format(pack(a, r, g, b))
-                        gradient.append(c[4:])
+                c = '0x{0:x}'.format(pack(a, r, g, b))
+                gradient.append(c[4:])
 
         return gradient
 
@@ -829,39 +847,39 @@ class KeyInput():
     old_settings = None
 
     def __init__(self):
-       self.ch_set = []
-       self.old_settings = termios.tcgetattr(sys.stdin)
+        self.ch_set = []
+        self.old_settings = termios.tcgetattr(sys.stdin)
 
-       new_settings = termios.tcgetattr(sys.stdin)
-       new_settings[3] = new_settings[3] & ~(termios.ECHO | termios.ICANON)
-       new_settings[6][termios.VMIN] = 0
-       new_settings[6][termios.VTIME] = 0
-       termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
+        new_settings = termios.tcgetattr(sys.stdin)
+        new_settings[3] = new_settings[3] & ~(termios.ECHO | termios.ICANON)
+        new_settings[6][termios.VMIN] = 0
+        new_settings[6][termios.VTIME] = 0
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
 
     def get_key(self):
-       self.ch = os.read(sys.stdin.fileno(), 3)
+        self.ch = os.read(sys.stdin.fileno(), 3)
 
-       if self.ch != None and len(self.ch) > 0:
-           self.ch_set.append(self.ch)
+        if self.ch != None and len(self.ch) > 0:
+            self.ch_set.append(self.ch)
 
-       return self.ch;
+        return self.ch;
 
     def get_key_parsed(self):
-           self.ch = self.get_key()
+        self.ch = self.get_key()
 
-           if self.ch  == bytes('\x1b[A', "utf-8"):
-               return("up")
-           elif self.ch == bytes('\x1b[B', "utf-8"):
-               return("down")
-           elif self.ch == bytes('\x1b[C', "utf-8"):
-               return("right")
-           elif self.ch == bytes('\x1b[D', "utf-8"):
-               return("left")
+        if self.ch  == bytes('\x1b[A', "utf-8"):
+            return("up")
+        elif self.ch == bytes('\x1b[B', "utf-8"):
+            return("down")
+        elif self.ch == bytes('\x1b[C', "utf-8"):
+            return("right")
+        elif self.ch == bytes('\x1b[D', "utf-8"):
+            return("left")
 
     #@atexit.register
     def exit(self):
-       if self.old_settings:
-          termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        if self.old_settings:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 
 class SnakeGame():
@@ -1133,8 +1151,8 @@ class Service:
             p
 
         except NameError:
-           self.prntr.printi('Could not execute: ' + cmd)
-           return False
+            self.prntr.printi('Could not execute: ' + cmd)
+            return False
 
         return p
 
