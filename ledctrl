@@ -102,7 +102,7 @@ class Server():
         try:
             data, (ip, port) = self.sock.recvfrom(1024, 0x40)
         except:
-            print("UDP receive: No data. Waiting for commands")
+            print("No data received. Waiting for commands")
             pass
 
         if len(data) > 0:
@@ -216,14 +216,21 @@ class Matrix(Server):
             if len(args) == 1:
                 if len(args[0]) == 6:
                     colour = args[0]
-                    self.set_colour(colour, "000000", True, 256)
+                    self.set_colour(colour, "000000", 23, 0)
             elif len(args) == 2:
                 if len(args[0]) == 6:
                     colour = args[0]
-                    pos = args[1]
-                    self.prntr.printi("yo")
-                    if pos > -1 <= self.npxm:
-                        self.set_px_colour(colour, pos, True)
+                    npx = int(args[1])
+                    if npx > -1 <= self.npxm:
+                        self.set_colour(colour, "000000", npx, 0)
+            elif len(args) == 3:
+                self.prntr.printi("bla")
+                if len(args[0]) == 6:
+                    colour = args[0]
+                    npx = int(args[1])
+                    offset = int(args[2])
+                    if npx > -1 <= self.npxm:
+                        self.set_colour(colour, "000000", npx, offset)
 
         elif payload == "set-random-colour":
             self.set_random_colour()
@@ -335,21 +342,27 @@ class Matrix(Server):
     def reset(self, colour="794044"):
         self.set_colour(colour)
 
-    def set_colour(self, colour="FFFFFF", colour_bg="000000", npx=23, offset=0):
+    def set_colour(self, colour="FFFFFF",
+                         colour_bg="000000",
+                         npx=0,
+                         offset=0):
+
         frame = []
         rgb = self.colour_hex_to_rgb(colour)
+        self.prntr.printi("Setting " + str(npx) + " Pixel(s), starting at " + str(offset)) 
         self.prntr.printi("\x1b[38;" + str(rgb[0]) + ";"
                                      + str(rgb[1]) + ";"
                                      + str(rgb[2]) + ";249m"
-                                     + colour + "\x1b[0m"
-                                     + colour)
+                                     + colour + "\x1b[0m "
+                                     + colour + " ("
+                                     + str(rgb[0]) + ","
+                                     + str(rgb[1]) + ","
+                                     + str(rgb[2]) + ")")
 
         if npx > 0:
             # Set selected pixels to colour
             for x in range(self.npxm):
-                if  offset == x:
-                    frame.append(colour)
-                elif x > offset < (offset + npx):
+                if x >= offset and x < npx:
                     frame.append(colour)
                 else:
                     frame.append(colour_bg)
@@ -1101,11 +1114,8 @@ class Service:
             #self.reset_failed()
             #self.restart()
             self.start_transient()
-            self.start_transient()
 
         elif service_state == "running":
-            prntr.printi("Service is running")
-
             if action == "stop":
                 prntr.printi("Stopping " + self.name + " service")
                 self.stop()
@@ -1206,14 +1216,14 @@ class Homekit():
 def show_help():
     print("\n  Usage:")
     print("")
-    print("    ledctrl help                            - show this dialog")
-    print("    ledctrl turn-on                         - turn on the lights")
-    print("    ledctrl turn-off                        - turn off the lights")
-    print("    ledctrl set-colour                      - set colour")
-    print("    ledctrl fade-colours                    - fade colours")
-    print("    ledctrl show-text                       - show text")
-    print("    ledctrl play-snake                      - start snake game")
-    print("    ledctrl stop                            - stop snake game")
+    print("    ledctrl help                            - Show this dialog")
+    print("    ledctrl turn-on                         - Turn on the lights")
+    print("    ledctrl turn-off                        - Turn off the lights")
+    print("    ledctrl set-colour                      - Set colour")
+    print("    ledctrl fade-colours                    - Fade colours")
+    print("    ledctrl show-text                       - Show text")
+    print("    ledctrl play-snake                      - Start snake game")
+    print("    ledctrl stop                            - Stop snake game")
     print("\n")
 
 
@@ -1229,21 +1239,12 @@ if __name__ == '__main__':
 
     prntr = Printer(loglevel)
     cmd = sys.argv[0]
-    action = ""
+    action = sys.argv[1]
     msg = ""
-    payload_arg_0 = ""
 
-    if sys.argv.__len__() > 1:
-        if len(sys.argv[1]) > 0:
-            action = sys.argv[1]
-        if sys.argv.__len__() > 2:
-            if len(sys.argv[2]) > 0:
-                payload_arg_0 = sys.argv[2]
-                if sys.argv.__len__() > 3:
-                    if len(sys.argv[3]) > 0:
-                        payload_arg_1 = sys.argv[3]
-
-    sys.argv = []
+    if action == "help":
+        show_help()
+        sys.exit(0)
 
     service_name = "ledctrl"
     cmd_start = "/usr/local/src/ledctrl/ledctrl start"
@@ -1254,10 +1255,6 @@ if __name__ == '__main__':
     cmd_start_homekit = "/usr/local/src/ledctrl/ledctrl homekit"
     service_homekit = Service(service_name_homekit, cmd_start_homekit, "ledctrl homekit server")
     service_homekit.check()
-
-    if action == "help":
-        show_help()
-        sys.exit(0)
 
     if action == "homekit":
         hk = Homekit()
@@ -1280,8 +1277,14 @@ if __name__ == '__main__':
 
     if len(action) > 0:
         msg = action
-        if len(payload_arg_0) > 0:
-            msg = action + " " + payload_arg_0
+        if len(sys.argv) > 3:
+            msg = sys.argv[1] + " " + sys.argv[2] + " " + sys.argv[3]
+        elif len(sys.argv) > 2:
+            msg = sys.argv[1] + " " + sys.argv[2]
+        elif len(sys.argv) > 1:
+            msg = sys.argv[1]
+
+    sys.argv = []
 
     if len(msg) > 0:
         prntr.printd("Sending: " + msg)
