@@ -40,7 +40,7 @@ dim_y = 6
 # default payload: effect to execute
 payload = "set-colour"
 # loglevel: info / warning / debug
-loglevel = "debug"
+DEBUG = False
 
 f2c = lambda f: int(f * 255.0) & 0xff
 c2f = lambda c: float(c) / 255.0
@@ -61,9 +61,8 @@ class Server():
         self.serve()
 
         sh = HandleSignals()
-        self.prntr = Printer()
 
-        self.matrix = Matrix(self.sock, dim_x, dim_y, self.client_con, self.prntr)
+        self.matrix = Matrix(self.sock, dim_x, dim_y, self.client_con)
         self.matrix.reset()
         self.state = False
         self.payload = ""
@@ -90,10 +89,10 @@ class Server():
         try:
             self.sock.bind((self.ip, self.port))
         except OSError as e:
-            print("Failed to bind socket: ", self.ip, self.port, e)
+            log.error("Failed to bind socket: ", self.ip, self.port, e)
             sys.exit(1)
 
-        print("Serving on", self.ip, self.port)
+        log.info("Serving on %s %s", self.ip, self.port)
 
     def receive(self):
         data = ""
@@ -102,8 +101,7 @@ class Server():
         try:
             data, (ip, port) = self.sock.recvfrom(1024, 0x40)
         except:
-            print("No data received. Waiting for commands")
-            pass
+            log.debug("UDP: No data received")
 
         if len(data) > 0:
             self.parse_msg(data)
@@ -114,14 +112,14 @@ class Server():
     def parse_msg(self, data):
         data = str(data).strip('b\'')
         msg = "Received message: " + data
-        self.prntr.printi(msg)
+        log.info(msg)
 
         if data == "ping":
-            self.prntr.printi("pong")
+            log.info("pong")
             return
 
         elif data == "get-payload":
-            self.prntr.printi("Current payload: " + self.get_payload())
+            log.info("Current payload: %s", self.get_payload())
             return
 
         self.matrix.exec_payload(data)
@@ -166,12 +164,11 @@ class Matrix(Server):
                  239, 238, 237, 236, 235, 234, 233, 232, 231, 230,
                  229, 228, 227, 226, 225, 224]
 
-    def __init__(self, sock, dim_x, dim_y, con, prntr):
+    def __init__(self, sock, dim_x, dim_y, con):
         self.con = con
         self.dim_x = dim_x
         self.dim_y = dim_y
         self.npxm = dim_x * dim_y
-        self.prntr = prntr
         self.sock = sock
         self.state = False
 
@@ -184,7 +181,7 @@ class Matrix(Server):
         payload = args.pop(0)
         self.set_payload(payload)
 
-        self.prntr.printi("Executing payload: " + payload)
+        log.info("Executing payload: %s", payload)
 
         if payload == "turn-on":
             colour = "FF3399"
@@ -196,7 +193,7 @@ class Matrix(Server):
 
         elif payload == "toggle":
             state = self.get_toggle_state()
-            self.prntr.printi("State: " + str(state))
+            log.info("State: %s", str(state))
             if not state:
                 colour = "FF3399"
                 self.toggle_state()
@@ -224,7 +221,7 @@ class Matrix(Server):
                     if npx > -1 <= self.npxm:
                         self.set_colour(colour, "000000", npx, 0)
             elif len(args) == 3:
-                self.prntr.printi("bla")
+                log.info("bla")
                 if len(args[0]) == 6:
                     colour = args[0]
                     npx = int(args[1])
@@ -248,7 +245,9 @@ class Matrix(Server):
             self.set_random_pixel()
 
         elif payload == "show-text":
-            self.show_text("ledctrl")
+            if len(args) == 1:
+                text = args[0]
+                self.show_text(text)
 
         elif payload == "show-image":
             self.show_image("e.bmp", "bitmap")
@@ -265,12 +264,16 @@ class Matrix(Server):
             self.move_lines(colour, colour_bg, 0.08)
 
         else:
-            self.prntr.printi("There is no such command or payload")
+            log.info("There is no such command or payload")
             show_help()
             return False
 
     def get_px_pos(self, px):
         return self.px_layout.index(px)
+
+    def colour_complementary(self, colour):
+        complementary_colour = 0xFFFFFF ^ int(colour, 16)
+        return complementary_colour
 
     def colour_gen_hex_code(self):
         return ''.join([random.choice('0123456789ABCDEF') for x in range(6)])
@@ -290,23 +293,21 @@ class Matrix(Server):
         return rgb_to_hls(rgb[0], rgb[1], rgb[2])
 
     def colour_fade(self, colours=[0xffFFF5C3, 0xff0BD7D5, 0xffFF7260], speed=1, steps=1000):
-        self.prntr.printi("Running payload: " + payload + " with colours: at speed: " + str(speed))
 
         for x in range(colours.__len__()):
             if isinstance(colours[x], int):
-                c = "0xff" + colours[x]
+                c = "0xff" + str(colours[x])
                 colours[x] = int(c, 16)
 
         colours = self.colour_get_gradient(colours, steps)
-        self.prntr.printi(str(colours.__len__()))
+        log.info(str(colours.__len__()))
 
         while True:
             for x in range(colours.__len__()):
                 self.set_colour(colours[x])
-                self.prntr.printi("Current colour: " + colours[x])
                 time.sleep(speed)
 
-            # reverse list
+            # Reverse list
             colours = colours[::-1]
 
     def colour_get_gradient(self, colours, steps):
@@ -348,16 +349,17 @@ class Matrix(Server):
                          offset=0):
 
         frame = []
+        c_complement = self.colour_complementary(colour)
         rgb = self.colour_hex_to_rgb(colour)
-        self.prntr.printi("Setting " + str(npx) + " Pixel(s), starting at " + str(offset)) 
-        self.prntr.printi("\x1b[38;" + str(rgb[0]) + ";"
-                                     + str(rgb[1]) + ";"
-                                     + str(rgb[2]) + ";249m"
-                                     + colour + "\x1b[0m "
-                                     + colour + " ("
-                                     + str(rgb[0]) + ","
-                                     + str(rgb[1]) + ","
-                                     + str(rgb[2]) + ")")
+        log.info("Setting %d Pixel(s), starting at %d", npx, offset)
+        log.info("\x1b[38;%d;%d;%d;249m%s\x1b[0m %s (%d,%d,%d)", rgb[0],
+                                                                 rgb[1],
+                                                                 rgb[2],
+                                                                 colour,
+                                                                 colour,
+                                                                 rgb[0],
+                                                                 rgb[1],
+                                                                 rgb[2])
 
         if npx > 0:
             # Set selected pixels to colour
@@ -385,7 +387,7 @@ class Matrix(Server):
         while True:
             frame = []
 
-            self.prntr.printi("state: " + self.state + " payload: " + self.payload)
+            log.info("state: " + self.state + " payload: " + self.payload)
             if self.state != "switch":
                 return
 
@@ -401,7 +403,7 @@ class Matrix(Server):
         img_data = img.read_file(fn)
         img.print_header_data(fn)
         bmp_frame = img.read_pixel_array(fn)
-        print(bmp_frame)
+        log.debug(bmp_frame)
         return
 
     def cycle(self, colour, colour_bg, speed=0.1, npx=1):
@@ -417,7 +419,7 @@ class Matrix(Server):
                     # Set a single pixel
                     self.set_colour(colour, colour_bg, False, 1, 1)
 
-                self.prntr.printi("state: " + self.state + " payload: " + self.payload)
+                log.info("state: " + self.state + " payload: " + self.payload)
                 time.sleep(speed)
 
     def shift(self, list, n):
@@ -532,7 +534,7 @@ class Matrix(Server):
                         break
 
                 offset = (j * self.dim_x) - self.dim_x
-                self.prntr.printi(str(j) + " " + str(self.dim_x) + " " + str(offset))
+                log.debug("%d %d %d", j, self.dim_x, offset)
                 self.set_colour(colour, colour_bg, self.dim_x, offset)
                 time.sleep(speed)
 
@@ -565,17 +567,17 @@ class Matrix(Server):
                     if y == z:
                         z = z + 5
                         p = t.pop(y)
-                        print("Popped", y)
+                        log.debug("Popped", y)
                         if y >= self.npxm:
                             i = y - self.npxm
-                            print("Inserting", i, p)
+                            log.debug("Inserting", i, p)
                             t.insert(i, p)
 
                 for y in range(self.npxm):
-                    if t[y] == "0":
-                        c = c_bg
-                    else:
-                        c = c_fg
+                    c = c_bg
+                    if y < len(t):
+                        if t[y] == "1":
+                            c = c_fg
                     frame.append(c)
 
                 self.draw(frame)
@@ -732,15 +734,15 @@ class Bitmap():
             if len(r_str) == 0:
                 # This is expected to happen when we've read everything.
                 if len(rows) != self.dim_y:
-                    print("Failed to parse pixel array of bitmap")
+                    log.error("Failed to parse pixel array of bitmap")
                 break
 
             if len(g_str) == 0:
-                print("Got 0 length string for green. Aborting")
+                log.error("Got 0 length string for green. Aborting")
                 break
 
             if len(b_str) == 0:
-                print("Got 0 length string for blue. Aborting")
+                log.error("Got 0 length string for blue. Aborting")
                 break
 
             r = ord(r_str)
@@ -776,74 +778,6 @@ class Bitmap():
         print('Important Colours: %s' % struct.unpack('I', bmp.read(4)))
 
 
-class Printer():
-
-    buf = ""
-
-    def __init__(self, loglevel="info", use_journal=True):
-        self.use_journal = use_journal
-        self.loglevel = loglevel
-
-    def init_canvas(dim_x, dim_y):
-        self.dim_x = dim_x
-        self.dim_y = dim_y
-
-    def print(self, msg):
-        print(msg)
-
-        if self.use_journal:
-            journal.send(msg)
-
-    # info
-    def printi(self, msg):
-        if self.loglevel == "info" or self.loglevel == "warning" or self.loglevel == "debug":
-            self.print(msg)
-
-    # warning
-    def printw(self, msg):
-        if self.loglevel == "warning" or self.loglevel == "debug":
-            self.print(msg)
-
-    # debug
-    def printd(self, msg):
-        if self.loglevel == "debug":
-            self.print(msg)
-
-    # exception
-    def printe(self, msg):
-        print(msg)
-
-    def term_draw(self, msg):
-        start = 0
-        end = 6
-        len = msg.__len__()
-        ntoks = int(len / 6)
-
-        self.term_clear()
-
-        for x in range(self.dim_y):
-
-            if x > 0:
-                start = start + (self.dim_x * 6)
-                end = end + (self.dim_x * 6)
-
-            print(msg[start:end],
-                  msg[start+6:end+6],
-                  msg[start+12:end+12],
-                  msg[start+18:end+18],
-                  msg[start+24:end+24])
-
-        print("")
-        print(self.buf)
-        self.buf = ""
-
-    def term_print(self, msg):
-        self.buf += msg
-
-    def term_clear(self):
-        print(chr(27) + "[2J")
-
-
 class UDPClient():
 
     def __init__(self, ip, port):
@@ -853,21 +787,20 @@ class UDPClient():
         #self.sock.setsockopt(socket.IPPROTO_IP, IN.IP_MTU_DISCOVER, IN.IP_PMTUDISC_WANT)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.SO_REUSEADDR, 1)
         #self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-        self.prntr = Printer()
 
     def send(self, m):
         try:
             self.sock.sendto(bytes.fromhex(m), (self.ip, self.port))
         except Exception as e:
-            self.prntr.printi(str(e))
-            self.prntr.printi("Network unavailable. Aborting")
+            log.info(str(e))
+            log.info("Network unavailable. Aborting")
             sys.exit(1)
 
     def sendm(self, m):
         try:
             self.sock.sendto(bytes(m, "UTF-8"), (self.ip, self.port))
         except:
-            self.prntr.printi("Network unavailable. Aborting")
+            log.info("Network unavailable. Aborting")
             sys.exit(1)
 
 
@@ -1046,7 +979,7 @@ class SnakeGame():
 
     def game_over(self):
         self.matrix.set_colour("FF0000")
-        print("Game Over")
+        log.info("Game Over")
         sys.exit()
 
 
@@ -1055,14 +988,13 @@ class HandleSignals:
     def __init__(self):
         self.original_sigint = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, self.shutdown)
-        self.prntr = Printer()
 
     def restore(self):
         signal.signal(signal.SIGINT, self.original_sigint)
 
     def shutdown(self):
         self.restore()
-        self.prntr.printi("Exiting")
+        log.info("Exiting")
         sys.exit(1)
 
 
@@ -1072,7 +1004,6 @@ class Service:
         self.name = name
         self.cmd_start = cmd_start
         self.desc = desc
-        self.prntr = Printer(loglevel)
 
     def get_state(self):
         cmd = "systemctl --user show -p SubState " + self.name
@@ -1096,9 +1027,9 @@ class Service:
         service_state = self.get_state()
 
         if not service_state:
-            prntr.printi("Could not determine service state")
+            log.info("Could not determine service state")
         else:
-            prntr.printi(self.name + " service state: " + service_state)
+            log.info(self.name + " service state: " + service_state)
 
         if service_state == "not-found":
             self.start_transient()
@@ -1117,7 +1048,7 @@ class Service:
 
         elif service_state == "running":
             if action == "stop":
-                prntr.printi("Stopping " + self.name + " service")
+                log.info("Stopping %s service", self.name)
                 self.stop()
                 sys.exit(0)
 
@@ -1125,7 +1056,7 @@ class Service:
         self.start("transient")
 
     def start(self, type="transient"):
-        prntr.printi("Starting service: " + self.name)
+        log.info("Starting service: %s", self.name)
         cmd = 'systemd-run --user \
                            --unit=' + self.name + ' \
                            --description="' + self.desc + '" \
@@ -1141,12 +1072,12 @@ class Service:
             self.restart()
 
     def restart(self):
-        prntr.printi("Restarting service: " + self.name)
+        log.info("Restarting service: %s", self.name)
         cmd = 'systemctl --user restart ' + self.name
         p = self.run_cmd(cmd)
 
         if p.stdout.strip('\n') == "Failed to restart " + self.name + " unit. " + self.name + ".service not found.":
-            self.prntr.printi("Restart failed. Trying to start "+ self.name)
+            log.info("Restart failed. Trying to start %s", self.name)
             self.start()
 
     def stop(self):
@@ -1163,7 +1094,7 @@ class Service:
                       stderr=subprocess.STDOUT,
                       universal_newlines=True):
 
-        self.prntr.printd("Executing: " + cmd)
+        log.debug("Executing: %s", cmd)
 
         try:
             p = subprocess.run(cmd,
@@ -1176,14 +1107,14 @@ class Service:
 
         except:
             e = sys.exc_info()[0]
-            print(e)
+            log.debug(e)
             raise
 
         try:
             p
 
         except NameError:
-            self.prntr.printi('Could not execute: ' + cmd)
+            log.info('Could not execute: %s', cmd)
             return False
 
         return p
@@ -1206,14 +1137,15 @@ class Homekit():
             httpd.accessories.add_accessory(accessory)
 
             httpd.publish_device()
-            print('Published HomeKit device')
+            log.info('Published HomeKit device')
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print('Unpublish HomeKit device')
+            log.info('Unpublish HomeKit device')
             httpd.unpublish_device()
 
 
 def show_help():
+
     print("\n  Usage:")
     print("")
     print("    ledctrl help                            - Show this dialog")
@@ -1231,16 +1163,22 @@ if __name__ == '__main__':
 
     log = logging.getLogger('ledctrl')
     log.propagate = False
-    #log.addHandler(JournalHandler())
-    #logging.root.addHandler(JournalHandler())
-    #log.setLevel(logging.DEBUG)
-    #JournalHandler(SYSLOG_IDENTIFIER='ledctrl')
-    #log.warning("Some message: %s", 'detail')
+    log.addHandler(journal.JournalHandler())
+    logging.root.addHandler(journal.JournalHandler())
 
-    prntr = Printer(loglevel)
-    cmd = sys.argv[0]
-    action = sys.argv[1]
+    if DEBUG:
+        log.setLevel(logging.DEBUG)
+    else:
+        log.setLevel(logging.INFO)
+
+    journal.JournalHandler(SYSLOG_IDENTIFIER='ledctrl')
+    action = ""
     msg = ""
+
+    cmd = sys.argv[0]
+
+    if len(sys.argv) > 1:
+        action = sys.argv[1]
 
     if action == "help":
         show_help()
@@ -1287,6 +1225,6 @@ if __name__ == '__main__':
     sys.argv = []
 
     if len(msg) > 0:
-        prntr.printd("Sending: " + msg)
+        log.debug("Sending: %s", msg)
         c = UDPClient(server_ip, server_port)
         c.sendm(msg)
