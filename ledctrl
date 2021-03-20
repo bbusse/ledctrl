@@ -82,7 +82,7 @@ class Server():
         try:
             self.sock.bind((self.ip, self.port))
         except OSError as e:
-            log.error("Failed to bind socket: ", self.ip, self.port, e)
+            log.error("Failed to bind socket: %s %d %s", self.ip, self.port, e)
             sys.exit(1)
 
         log.info("Serving on %s %s", self.ip, self.port)
@@ -93,13 +93,14 @@ class Server():
         # non-blocking (0x40)
         try:
             data, (ip, port) = self.sock.recvfrom(1024, 0x40)
+            log.debug("UDP: Received data on %s:%d", ip, port)
         except:
             log.debug("UDP: No data received")
 
         if len(data) > 0:
             self.parse_msg(data)
 
-    def get_port():
+    def get_port(self):
         return self.port
 
     def parse_msg(self, data):
@@ -164,6 +165,7 @@ class Matrix(Server):
         self.npxm = dim_x * dim_y
         self.sock = sock
         self.state = False
+        self.current_colour = "000000"
 
     def get_payload(self):
         return self.state
@@ -223,7 +225,7 @@ class Matrix(Server):
                         self.set_colour(colour, "000000", npx, offset)
 
         elif payload == "set-random-colour":
-            self.set_random_colour()
+            self.set_random_colour(True, 1, 10)
 
         elif payload == "fade-colours":
             self.colour_fade()
@@ -243,7 +245,7 @@ class Matrix(Server):
                 self.show_text(text)
 
         elif payload == "show-image":
-            self.show_image("e.bmp", "bitmap")
+            self.show_image("e.bmp")
 
         elif payload == "show-clock":
             self.show_clock()
@@ -342,6 +344,7 @@ class Matrix(Server):
                          offset=0):
 
         frame = []
+        self.current_colour = colour
         c_complement = self.colour_complementary(colour)
         rgb = self.colour_hex_to_rgb(colour)
         log.info("Setting %d Pixel(s), starting at %d", npx, offset)
@@ -368,11 +371,16 @@ class Matrix(Server):
 
         self.draw(frame)
 
-    def set_random_colour(self, fade=False, t_sleep=30):
+    def set_random_colour(self, t_sleep, fade=False, fade_speed=1, fade_cycles=10):
 
         while True:
-            c = self.colour_gen_hex_code()
-            self.set_colour(c)
+            colour = self.colour_gen_hex_code()
+            if fade:
+                colour_0 = int("0xff" + self.current_colour, 16)
+                colour_1 = int("0xff" + colour, 16)
+                self.colour_fade([colour_0, colour_1], fade_speed, fade_cycles)
+            else:
+                self.set_colour(colour)
             time.sleep(t_sleep)
 
     def set_random_pixel(self, t_sleep=0.5):
@@ -397,7 +405,6 @@ class Matrix(Server):
         img.print_header_data(fn)
         bmp_frame = img.read_pixel_array(fn)
         log.debug(bmp_frame)
-        return
 
     def cycle(self, colour, colour_bg, speed=0.1, npx=1):
         while True:
@@ -407,20 +414,20 @@ class Matrix(Server):
 
                 if npx > -1:
                     # Set npx pixels at once
-                    self.set_colour(colour, colour_bg, False, npx, i)
+                    self.set_colour(colour, colour_bg, npx, i)
                 else:
                     # Set a single pixel
-                    self.set_colour(colour, colour_bg, False, 1, 1)
+                    self.set_colour(colour, colour_bg, 1, 1)
 
                 log.info("state: " + self.state + " payload: " + self.payload)
                 time.sleep(speed)
 
-    def shift(self, list, n):
+    def shift(self, list_, n):
         for i in range(n):
             t = list.pop()
-            list.insert(0, t)
+            list_.insert(0, t)
 
-        return list
+        return _list
 
     def show_rainbow(self, colours = ["ffa500",
                                       "ff4500",
@@ -560,10 +567,10 @@ class Matrix(Server):
                     if y == z:
                         z = z + 5
                         p = t.pop(y)
-                        log.debug("Popped", y)
+                        log.debug("Popped %d", y)
                         if y >= self.npxm:
                             i = y - self.npxm
-                            log.debug("Inserting", i, p)
+                            log.debug("Inserting %d %d", i, p)
                             t.insert(i, p)
 
                 for y in range(self.npxm):
@@ -835,7 +842,7 @@ class KeyInput():
     #@atexit.register
     def exit(self):
         if self.old_settings:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
 
 
 class SnakeGame():
@@ -906,32 +913,32 @@ class SnakeGame():
             snake_add_px(random.randint())
 
         elif dir == "up":
-            px = self.px_snake_head - dim_y
+            px = self.px_snake_head - self.matrix.dim_y
 
             if px < 0:
-                px = self.px_snake_head + ((dim_x * dim_y) - dim_x)
+                px = self.px_snake_head + ((self.matrix.dim_x * self.matrix.dim_y) - dim_x)
 
         elif dir == "down":
-            px = self.px_snake_head + dim_y
+            px = self.px_snake_head + self.matrix.dim_y
 
             if px > self.matrix.npxm - 1:
                 px = self.matrix.px_get_column(self.px_snake_head) - 1
 
         elif dir == "left":
             if self.matrix.px_get_column(self.px_snake_head) == 1:
-                px = self.px_snake_head + dim_x - 1
+                px = self.px_snake_head + self.matrix.dim_x - 1
             else:
                 px = self.px_snake_head - 1
             if px < 0:
-                px = dim_x - 1
+                px = self.matrix.dim_x - 1
 
         elif dir == "right":
-            if self.matrix.px_get_column(self.px_snake_head) == dim_x:
-                px = self.px_snake_head - dim_x -1
+            if self.matrix.px_get_column(self.px_snake_head) == self.matrix.dim_x:
+                px = self.px_snake_head - self.matrix.dim_x -1
             else:
                 px = self.px_snake_head + 1
             if px > self.matrix.npxm:
-                px = self.matrix.npxm - dim_x - 1
+                px = self.matrix.npxm - self.matrix.dim_x - 1
 
         if px in self.px_snake:
             self.game_over()
@@ -999,8 +1006,11 @@ class Service:
         self.desc = desc
         self.env_args = ""
 
-        for k, v in env.items():
-            self.env_args += "--setenv=" + k + "=" + str(v) + " "
+        if not env:
+            self.env_args = ""
+        else:
+            for k, v in env.items():
+                self.env_args += "--setenv=" + k + "=" + str(v) + " "
 
 
     def get_state(self):
@@ -1053,8 +1063,9 @@ class Service:
     def start_transient(self):
         self.start("transient")
 
-    def start(self, type="transient"):
-        log.info("Starting service: %s", self.name)
+    def start(self, service_type="transient"):
+        log.info("Starting service %s with type '%s': %s", self.name
+                                                         , service_type)
 
 
         cmd = 'systemd-run --user \
@@ -1092,22 +1103,25 @@ class Service:
 
     def run_cmd(self, cmd,
                       shell=True,
+                      stdin=None,
                       stdout=subprocess.PIPE,
                       stderr=subprocess.STDOUT,
                       universal_newlines=True,
-                      env=False):
+                      env={},
+                      check=False):
 
         log.debug("Executing: %s", cmd)
 
         try:
             p = subprocess.run(cmd,
-                               stdin=None,
+                               stdin=stdin,
                                input=None,
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT,
-                               shell=True,
-                               universal_newlines=True,
-                               env=os.environ.copy())
+                               stdout=stdout,
+                               stderr=stderr,
+                               shell=shell,
+                               universal_newlines=universal_newlines,
+                               env=env,
+                               check=check)
 
         except:
             e = sys.exc_info()[0]
@@ -1126,18 +1140,22 @@ class Service:
 
 class Homekit():
 
+    def __init__(self, ip, port):
+        self.hk_server_ip = ip
+        self.hk_server_port = port
+        self.c = UDPClient(self.hk_server_ip, self.hk_server_port)
+
     def toggle(self, value):
-        c = UDPClient(server_ip, server_port)
-        c.sendm("toggle")
+        self.c.sendm("toggle")
 
     def homekit_add_accessory(self):
         try:
             httpd = AccessoryServer(os.path.expanduser('~/.config/homekit/lightbulb-0.json'))
 
             accessory = Accessory('test_light', 'homekit_python', 'Demoserver', '0001', '0.1')
-            lightService = LightBulbService()
-            lightService.set_on_set_callback(self.toggle)
-            accessory.services.append(lightService)
+            light_service = LightBulbService()
+            light_service.set_on_set_callback(self.toggle)
+            accessory.services.append(light_service)
             httpd.accessories.add_accessory(accessory)
 
             httpd.publish_device()
@@ -1221,12 +1239,13 @@ if __name__ == '__main__':
                                    default=False)
 
     # Positional args
-    sp = parser.add_subparsers(dest='cmd')
-    for cmd in ['help', 'start', 'stop', 'homekit', 'set-colour',
-                'set-random-colour', 'show-clock', 'show-rainbow',
-                'show-snake', 'show-text', 'turn-on', 'turn-off']:
+    sp = parser.add_subparsers(dest='action_cmd')
+    for action_cmd in ['help', 'start', 'stop', 'homekit',
+                       'set-colour', 'set-random-colour',
+                       'show-clock', 'show-rainbow', 'show-snake',
+                       'show-text', 'turn-on', 'turn-off']:
 
-        sp.add_parser(cmd)
+        sp.add_parser(action_cmd)
 
     spp = sp.add_parser('set-colour')
     spp.add_argument('colour', type=str)
@@ -1234,8 +1253,8 @@ if __name__ == '__main__':
     spp.add_argument('offset', type=int)
 
     args = parser.parse_args()
-    address = args.address
-    port = args.port
+    ledctrl_address = args.address
+    ledctrl_port = args.port
     target_address = args.target_address
     target_port = args.target_port
     target_dim_x = args.target_dim_x
@@ -1245,8 +1264,8 @@ if __name__ == '__main__':
     args = []
 
     service_env = {
-        "LEDCTRL_ADDRESS":        address,
-        "LEDCTRL_PORT":           port,
+        "LEDCTRL_ADDRESS":          ledctrl_address,
+        "LEDCTRL_PORT":             ledctrl_port,
         "LEDCTRL_TARGET_0_ADDRESS": target_address,
         "LEDCTRL_TARGET_0_PORT":    target_port,
         "LEDCTRL_TARGET_0_DIM_X":   target_dim_x,
@@ -1260,12 +1279,10 @@ if __name__ == '__main__':
         log.setLevel(logging.INFO)
 
     # Default payload: effect to execute
-    payload = "set-colour"
+    PAYLOAD = "turn-on"
 
     action = ""
     msg = ""
-
-    cmd = sys.argv[0]
 
     if len(sys.argv) > 1:
         action = sys.argv[1]
@@ -1288,20 +1305,19 @@ if __name__ == '__main__':
         service_homekit.check()
 
     if action == "homekit":
-        hk = Homekit()
+        hk = Homekit(ledctrl_address, ledctrl_port)
         hk.homekit_add_accessory()
 
     if action == "start":
-        log.debug("%s", cmd)
         server = Server("udp",
-                        address,
-                        port,
+                        ledctrl_address,
+                        ledctrl_port,
                         target_address,
                         target_port,
                         target_dim_x,
                         target_dim_y)
 
-        server.matrix.exec_payload(payload)
+        server.matrix.exec_payload(PAYLOAD)
 
         while True:
             time.sleep(1)
@@ -1320,5 +1336,5 @@ if __name__ == '__main__':
 
     if len(msg) > 0:
         log.debug("Sending: %s", msg)
-        c = UDPClient(address, port)
-        c.sendm(msg)
+        client = UDPClient(ledctrl_address, ledctrl_port)
+        client.sendm(msg)
