@@ -20,8 +20,36 @@ Any following invocation will trigger the client
 mode and can be used to change the currently  
 active action by sending commands to the server  
 process.  
-  
+
+## Usage
+Install required Python moduled
+```
+$ pip install --user -r requirements.txt
+```
 Use 'ledctrl help' to get a usage overview.
+```
+$ ledctrl help
+```
+It is recommended to set the required variable via the ENVIRONMENT  
+```
+$ LEDCTRL_ADDRESS=10.23.42.64 \
+  LEDCTRL_PORT=4223 \
+  LEDCTRL_TARGET_0_ADDRESS=10.23.42.110 \
+  LEDCTRL_TARGET_0_PORT=2342 \
+  LEDCTRL_TARGET_0_DIM_X=32 \
+  LEDCTRL_TARGET_0_DIM_Y=24 \
+  ledctrl turn-on
+```
+alternatively via command line arguments
+```
+$ ledctrl --address=10.23.42.64 \
+          --port=4223 \
+          --target_address=10.23.64.110 \
+          --target_port=2342 \
+          --target_dim_x=32 \
+          --target_dim_y=24 \
+          turn-on
+```
 
 ## Dependencies
 
