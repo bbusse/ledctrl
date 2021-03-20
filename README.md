@@ -43,6 +43,17 @@ $ ledctrl --address=10.23.42.64 \
           --target_dim_y=24 \
           turn-on
 ```
+## Debug
+Use the '--debug' switch or set LEDCTRL_DEBUG=True in the ENVIRONMENT  
+  
+Watch the Journal output
+```
+$ journalctl --user -afn100 -uledctrl
+```
+For the HomeKit part
+```
+$ journalctl --user -afn100 -uledctrl-homekit
+```
 
 ## Dependencies
 - Python3
