@@ -1,25 +1,17 @@
 # ledctrl
 
-A HomeKit enabled daemon and client to control LEDs or  
-LED "displays"  
+A HomeKit enabled daemon and client to control LEDs or LED "displays"  
   
-It is currently primarily used to send frames  
-to a ESP8266 board with a firmware that takes  
-colours encoded in hex via UDP to control WS2812b  
-RGB LEDs.  
+It is currently primarily used to send frames to a ESP8266 board with a firmware that takes
+colours encoded in hex via UDP to control WS2812b RGB LEDs.  
   
 The firmware for the ESP8266 can be found here:  
 git://git.stuge.se/esp8266-ws2812b.git  
 
-On the first invocation of ledctrl the process  
-respawns itself as a transient systemd service  
-and starts sending frames to the configured IP  
+On the first invocation of ledctrl the process respawns itself as a transient systemd user service and starts sending frames to the configured IP
 by executing the configured default action.  
   
-Any following invocation will trigger the client  
-mode and can be used to change the currently  
-active action by sending commands to the server  
-process.  
+Any following invocation will trigger the client mode and can be used to change the currently active action by sending commands to the server process.
 
 ## Usage
 Install required Python moduled
@@ -40,7 +32,7 @@ $ LEDCTRL_ADDRESS=10.23.42.64 \
   LEDCTRL_TARGET_0_DIM_Y=24 \
   ledctrl turn-on
 ```
-alternatively via command line arguments
+Alternatively via command line arguments
 ```
 $ ledctrl --address=10.23.42.64 \
           --port=4223 \
@@ -53,6 +45,6 @@ $ ledctrl --address=10.23.42.64 \
 
 ## Dependencies
 
-Python3
-python-systemd
-homekit_python
+-Python3
+-python-systemd
+-homekit_python
