@@ -21,26 +21,11 @@ import struct
 import sys
 import termios
 import time
+import configargparse
 from systemd import journal
 from homekit import AccessoryServer
 from homekit.model import Accessory, LightBulbService
 
-#server_ip = "::1"
-server_ip = "10.64.64.110"
-server_port = 4223
-server_proto = "udp"
-#client_ip = "10.64.64.98"
-client_ip = "10.64.64.71"
-client_port = 2342
-client_proto = "udp"
-# number of pixels in the x dimension
-dim_x = 8
-# number of pixels in the y dimension
-dim_y = 6
-# default payload: effect to execute
-payload = "set-colour"
-# loglevel: info / warning / debug
-DEBUG = False
 
 f2c = lambda f: int(f * 255.0) & 0xff
 c2f = lambda c: float(c) / 255.0
@@ -53,7 +38,15 @@ pack = lambda a, r, g, b: (f2c(a) << 24) | (f2c(r) << 16) | (f2c(g) << 8) | f2c(
 
 class Server():
 
-    def __init__(self, server_proto, server_ip, server_port, client_ip, client_port, dim_x, dim_y):
+    def __init__(self,
+                 server_proto,
+                 server_ip,
+                 server_port,
+                 client_ip,
+                 client_port,
+                 dim_x,
+                 dim_y):
+
         self.ip = server_ip
         self.port = server_port
         self.client_con = UDPClient(client_ip, client_port)
@@ -132,7 +125,7 @@ class Matrix(Server):
     frame_prev = []
 
     _px_layout = [0, 1, 2, 3, 4,
-                 9, 8, 7, 6, 5,
+                  9, 8, 7, 6, 5,
                  10, 11, 12, 13, 14,
                  19, 18, 17, 16, 15,
                  20, 21, 22, 23, 24]
@@ -375,7 +368,7 @@ class Matrix(Server):
 
         self.draw(frame)
 
-    def set_random_colour(self, t_sleep=30):
+    def set_random_colour(self, fade=False, t_sleep=30):
 
         while True:
             c = self.colour_gen_hex_code()
@@ -1000,10 +993,15 @@ class HandleSignals:
 
 class Service:
 
-    def __init__(self, name, cmd_start, desc, loglevel="debug"):
+    def __init__(self, name, cmd_start, desc, env):
         self.name = name
         self.cmd_start = cmd_start
         self.desc = desc
+        self.env_args = ""
+
+        for k, v in env.items():
+            self.env_args += "--setenv=" + k + "=" + str(v) + " "
+
 
     def get_state(self):
         cmd = "systemctl --user show -p SubState " + self.name
@@ -1057,12 +1055,16 @@ class Service:
 
     def start(self, type="transient"):
         log.info("Starting service: %s", self.name)
+
+
         cmd = 'systemd-run --user \
                            --unit=' + self.name + ' \
                            --description="' + self.desc + '" \
                            --remain-after-exit \
                            --no-block \
-                           --send-sighup ' + self.cmd_start
+                           --send-sighup ' \
+                           + self.env_args \
+                           + self.cmd_start
 
         # for readability
         cmd = ' '.join(cmd.split())
@@ -1092,7 +1094,8 @@ class Service:
                       shell=True,
                       stdout=subprocess.PIPE,
                       stderr=subprocess.STDOUT,
-                      universal_newlines=True):
+                      universal_newlines=True,
+                      env=False):
 
         log.debug("Executing: %s", cmd)
 
@@ -1103,7 +1106,8 @@ class Service:
                                stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT,
                                shell=True,
-                               universal_newlines=True)
+                               universal_newlines=True,
+                               env=os.environ.copy())
 
         except:
             e = sys.exc_info()[0]
@@ -1165,13 +1169,99 @@ if __name__ == '__main__':
     log.propagate = False
     log.addHandler(journal.JournalHandler())
     logging.root.addHandler(journal.JournalHandler())
+    journal.JournalHandler(SYSLOG_IDENTIFIER='ledctrl')
+
+    parser = configargparse.ArgParser(description="")
+    parser.add_argument('--address', dest='address',
+                                     env_var='LEDCTRL_ADDRESS',
+                                     help="The address ledctrl listens on",
+                                     type=str,
+                                     required=True)
+
+    parser.add_argument('--port', dest='port',
+                                  env_var='LEDCTRL_PORT',
+                                  help="The port ledctrl listens on",
+                                  type=int,
+                                  required=True)
+
+    parser.add_argument('--target-address', dest='target_address',
+                                            env_var='LEDCTRL_TARGET_0_ADDRESS',
+                                            help="The address the target device listens on",
+                                            type=str,
+                                            required=True)
+
+    parser.add_argument('--target-port', dest='target_port',
+                                         env_var='LEDCTRL_TARGET_0_PORT',
+                                         help="The port the target device listens on",
+                                         type=int,
+                                         required=True)
+
+    parser.add_argument('--target-dim-x', dest='target_dim_x',
+                                          env_var='LEDCTRL_TARGET_0_DIM_X',
+                                          help="The number of LEDs or Pixels in the x dimension",
+                                          type=int,
+                                          required=True)
+
+    parser.add_argument('--target-dim-y', dest='target_dim_y',
+                                          env_var='LEDCTRL_TARGET_0_DIM_Y',
+                                          help="The number of LEDs or Pixels in the y dimension",
+                                          type=int,
+                                          required=True)
+
+    parser.add_argument('--homekit', dest='homekit',
+                                     env_var='LEDCTRL_HOMEKIT',
+                                     help="Enable HomeKit integration",
+                                     type=str,
+                                     default=False)
+
+    parser.add_argument('--debug', dest='DEBUG',
+                                   env_var='LEDCTRL_DEBUG',
+                                   help="Enable debug mode",
+                                   type=str,
+                                   default=False)
+
+    # Positional args
+    sp = parser.add_subparsers(dest='cmd')
+    for cmd in ['help', 'start', 'stop', 'homekit', 'set-colour',
+                'set-random-colour', 'show-clock', 'show-rainbow',
+                'show-snake', 'show-text', 'turn-on', 'turn-off']:
+
+        sp.add_parser(cmd)
+
+    spp = sp.add_parser('set-colour')
+    spp.add_argument('colour', type=str)
+    spp.add_argument('pixel', type=int)
+    spp.add_argument('offset', type=int)
+
+    args = parser.parse_args()
+    address = args.address
+    port = args.port
+    target_address = args.target_address
+    target_port = args.target_port
+    target_dim_x = args.target_dim_x
+    target_dim_y = args.target_dim_y
+    homekit = args.homekit
+    DEBUG = args.DEBUG
+    args = []
+
+    service_env = {
+        "LEDCTRL_ADDRESS":        address,
+        "LEDCTRL_PORT":           port,
+        "LEDCTRL_TARGET_0_ADDRESS": target_address,
+        "LEDCTRL_TARGET_0_PORT":    target_port,
+        "LEDCTRL_TARGET_0_DIM_X":   target_dim_x,
+        "LEDCTRL_TARGET_0_DIM_Y":   target_dim_y,
+    }
 
     if DEBUG:
         log.setLevel(logging.DEBUG)
+        log.info("DEBUG is enabled")
     else:
         log.setLevel(logging.INFO)
 
-    journal.JournalHandler(SYSLOG_IDENTIFIER='ledctrl')
+    # Default payload: effect to execute
+    payload = "set-colour"
+
     action = ""
     msg = ""
 
@@ -1184,28 +1274,32 @@ if __name__ == '__main__':
         show_help()
         sys.exit(0)
 
-    service_name = "ledctrl"
-    cmd_start = "/usr/local/src/ledctrl/ledctrl start"
-    service_ledctrl = Service(service_name, cmd_start, "ledctrl server")
+    service_ledctrl = Service("ledctrl",
+                              os.path.realpath(__file__) + " start",
+                              "ledctrl server",
+                              service_env)
     service_ledctrl.check()
 
-    service_name_homekit = "ledctrl-homekit"
-    cmd_start_homekit = "/usr/local/src/ledctrl/ledctrl homekit"
-    service_homekit = Service(service_name_homekit, cmd_start_homekit, "ledctrl homekit server")
-    service_homekit.check()
+    if homekit:
+        service_homekit = Service("ledctrl-homekit",
+                                  os.path.realpath(__file__) + " homekit",
+                                  "ledctrl homekit server",
+                                  service_env)
+        service_homekit.check()
 
     if action == "homekit":
         hk = Homekit()
         hk.homekit_add_accessory()
 
     if action == "start":
-        server = Server(server_proto,
-                        server_ip,
-                        server_port,
-                        client_ip,
-                        client_port,
-                        dim_x,
-                        dim_y)
+        log.debug("%s", cmd)
+        server = Server("udp",
+                        address,
+                        port,
+                        target_address,
+                        target_port,
+                        target_dim_x,
+                        target_dim_y)
 
         server.matrix.exec_payload(payload)
 
@@ -1226,5 +1320,5 @@ if __name__ == '__main__':
 
     if len(msg) > 0:
         log.debug("Sending: %s", msg)
-        c = UDPClient(server_ip, server_port)
+        c = UDPClient(address, port)
         c.sendm(msg)
