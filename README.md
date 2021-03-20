@@ -22,7 +22,8 @@ Use 'ledctrl help' to get a usage overview.
 ```
 $ ledctrl help
 ```
-It is recommended to set the required variable via the ENVIRONMENT  
+It is recommended to set the required variables via the ENVIRONMENT,
+e.g. by adding them to shellrc
 ```
 $ LEDCTRL_ADDRESS=10.23.42.64 \
   LEDCTRL_PORT=4223 \
@@ -44,7 +45,6 @@ $ ledctrl --address=10.23.42.64 \
 ```
 
 ## Dependencies
-
--Python3
--python-systemd
--homekit_python
+- Python3
+- python-systemd
+- homekit_python
