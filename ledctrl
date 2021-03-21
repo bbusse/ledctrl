@@ -47,13 +47,13 @@ class Server():
                  dim_x,
                  dim_y):
 
-        self.ip = server_ip
-        self.port = server_port
+        self.s_ip = server_ip
+        self.s_port = server_port
         self.client_con = UDPClient(client_ip, client_port)
         self.server_proto = server_proto
         self.serve()
 
-        sh = HandleSignals()
+        HandleSignals()
 
         self.matrix = Matrix(self.sock, dim_x, dim_y, self.client_con)
         self.matrix.reset()
@@ -80,12 +80,12 @@ class Server():
                                   socket.SOCK_DGRAM)
 
         try:
-            self.sock.bind((self.ip, self.port))
+            self.sock.bind((self.s_ip, self.s_port))
         except OSError as e:
-            log.error("Failed to bind socket: %s %d %s", self.ip, self.port, e)
+            log.error("Failed to bind socket: %s %d %s", self.s_ip, self.s_port, e)
             sys.exit(1)
 
-        log.info("Serving on %s %s", self.ip, self.port)
+        log.info("Serving on %s %s", self.s_ip, self.s_port)
 
     def receive(self):
         data = ""
@@ -101,7 +101,7 @@ class Server():
             self.parse_msg(data)
 
     def get_port(self):
-        return self.port
+        return self.s_port
 
     def parse_msg(self, data):
         data = str(data).strip('b\'')
@@ -112,7 +112,7 @@ class Server():
             log.info("pong")
             return
 
-        elif data == "get-payload":
+        if data == "get-payload":
             log.info("Current payload: %s", self.get_payload())
             return
 
@@ -171,9 +171,9 @@ class Matrix(Server):
         return self.state
 
     def exec_payload(self, data):
-        args = data.split()
-        print(*args, sep='\t')
-        payload = args.pop(0)
+        exec_args = data.split()
+        print(*exec_args, sep='\t')
+        payload = exec_args.pop(0)
         self.set_payload(payload)
 
         log.info("Executing payload: %s", payload)
@@ -181,12 +181,14 @@ class Matrix(Server):
         if payload == "turn-on":
             colour = "FF3399"
             self.set_colour(colour)
+            return True
 
-        elif payload == "turn-off":
+        if payload == "turn-off":
             colour = "000000"
             self.set_colour(colour)
+            return True
 
-        elif payload == "toggle":
+        if payload == "toggle":
             state = self.get_toggle_state()
             log.info("State: %s", str(state))
             if not state:
@@ -197,90 +199,106 @@ class Matrix(Server):
                 colour = "000000"
                 self.toggle_state()
                 self.set_colour(colour)
+            return True
 
-        elif payload == "cycle":
+        if payload == "cycle":
             colour = "FF3399"
             colour_bg = "000000"
             self.cycle(colour, colour_bg, 0.1, 32)
+            return True
 
-        elif payload in ['set-colour', 'switch-colour']:
+        if payload in ['set-colour', 'switch-colour']:
             colour = "99FF66"
-            if len(args) == 1:
-                if len(args[0]) == 6:
-                    colour = args[0]
+            if len(exec_args) == 1:
+                if len(exec_args[0]) == 6:
+                    colour = exec_args[0]
                     self.set_colour(colour, "000000", 23, 0)
-            elif len(args) == 2:
-                if len(args[0]) == 6:
-                    colour = args[0]
-                    npx = int(args[1])
+            elif len(exec_args) == 2:
+                if len(exec_args[0]) == 6:
+                    colour = exec_args[0]
+                    npx = int(exec_args[1])
                     if npx > -1 <= self.npxm:
                         self.set_colour(colour, "000000", npx, 0)
-            elif len(args) == 3:
-                log.info("bla")
-                if len(args[0]) == 6:
-                    colour = args[0]
-                    npx = int(args[1])
-                    offset = int(args[2])
+            elif len(exec_args) == 3:
+                if len(exec_args[0]) == 6:
+                    colour = exec_args[0]
+                    npx = int(exec_args[1])
+                    offset = int(exec_args[2])
                     if npx > -1 <= self.npxm:
                         self.set_colour(colour, "000000", npx, offset)
+            return True
 
-        elif payload == "set-random-colour":
+        if payload == "set-random-colour":
             self.set_random_colour(True, 1, 10)
+            return True
 
-        elif payload == "fade-colours":
+        if payload == "fade-colours":
             self.colour_fade()
+            return True
 
-        elif payload == "show-snake":
+        if payload == "show-snake":
             self.show_rainbow_snake()
+            return True
 
-        elif payload == "show-rainbow":
+        if payload == "show-rainbow":
             self.show_rainbow()
+            return True
 
-        elif payload == "set-random-pixel":
+        if payload == "set-random-pixel":
             self.set_random_pixel()
+            return True
 
-        elif payload == "show-text":
-            if len(args) == 1:
-                text = args[0]
+        if payload == "show-text":
+            if len(exec_args) == 1:
+                text = exec_args[0]
                 self.show_text(text)
+            return True
 
-        elif payload == "show-image":
+        if payload == "show-image":
             self.show_image("e.bmp")
+            return True
 
-        elif payload == "show-clock":
+        if payload == "show-clock":
             self.show_clock()
+            return True
 
-        elif payload == "play-snake":
+        if payload == "play-snake":
             SnakeGame(self.client_con, self.matrix)
+            return True
 
-        elif payload == "cycle-lines":
+        if payload == "cycle-lines":
             colour = "FF3399"
             colour_bg = "000000"
             self.move_lines(colour, colour_bg, 0.08)
+            return True
 
-        else:
-            log.info("There is no such command or payload")
-            show_help()
-            return False
+        log.info("There is no such command or payload")
+        show_help()
+        return False
 
-    def get_px_pos(self, px):
-        return self.px_layout.index(px)
 
-    def colour_complementary(self, colour):
+    def get_px_pos(self, pixel):
+        return self.px_layout.index(pixel)
+
+    @staticmethod
+    def colour_complementary(colour):
         complementary_colour = 0xFFFFFF ^ int(colour, 16)
         return complementary_colour
 
-    def colour_gen_hex_code(self):
+    @staticmethod
+    def colour_gen_hex_code():
         return ''.join([random.choice('0123456789ABCDEF') for x in range(6)])
 
-    def colour_hex_to_rgb(self, hex_str):
+    @staticmethod
+    def colour_hex_to_rgb(hex_str):
         if hex_str.startswith('#'):
             hex_str = hex[1:]
         if hex_str.__len__() == 3:
             hex_str = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]
         return tuple([int(hex_str[i:i + 2], 16) for i in range(0, len(hex_str), 2)])
 
-    def colour_rgb_to_hex(self, rgb):
+    @staticmethod
+    def colour_rgb_to_hex(rgb):
         return ''.join(["%0.2X" % c for c in rgb])
 
     def colour_hex_to_hls(self, c_hex):
@@ -305,7 +323,8 @@ class Matrix(Server):
             # Reverse list
             colours = colours[::-1]
 
-    def colour_get_gradient(self, colours, steps):
+    @staticmethod
+    def colour_get_gradient(colours, steps):
         colours_per_step = steps / len(colours)
         gradient = []
 
@@ -392,18 +411,18 @@ class Matrix(Server):
             if self.state != "switch":
                 return
 
-            for x in range(self.npxm):
+            for _ in range(self.npxm):
                 frame.append(self.colour_gen_hex_code())
 
             self.draw(frame)
             time.sleep(t_sleep)
             self.reset()
 
-    def show_image(self, fn):
-        img = Bitmap(fn, self.dim_x, self.dim_y)
-        img_data = img.read_file(fn)
-        img.print_header_data(fn)
-        bmp_frame = img.read_pixel_array(fn)
+    def show_image(self, filename):
+        img = Bitmap(filename, self.dim_x, self.dim_y)
+        img_data = img.read_file(filename)
+        img.print_header_data(filename)
+        bmp_frame = img.read_pixel_array(filename)
         log.debug(bmp_frame)
 
     def cycle(self, colour, colour_bg, speed=0.1, npx=1):
@@ -422,12 +441,13 @@ class Matrix(Server):
                 log.info("state: " + self.state + " payload: " + self.payload)
                 time.sleep(speed)
 
-    def shift(self, list_, n):
-        for i in range(n):
+    @staticmethod
+    def shift(list_, nshift):
+        for _ in range(nshift):
             t = list.pop()
             list_.insert(0, t)
 
-        return _list
+        return list_
 
     def show_rainbow(self, colours = ["ffa500",
                                       "ff4500",
@@ -442,7 +462,7 @@ class Matrix(Server):
             frame = []
 
             for y in range(self.dim_y):
-                for x in range(self.dim_x):
+                for _ in range(self.dim_x):
                     frame.append(colours[y])
 
             self.draw(frame)
@@ -538,18 +558,18 @@ class Matrix(Server):
                 self.set_colour(colour, colour_bg, self.dim_x, offset)
                 time.sleep(speed)
 
-    def px_get_row(self, n):
-        return math.ceil((n + 1) / dim_y)
+    def px_get_row(self, pixel):
+        return math.ceil((pixel + 1) / self.matrix.dim_y)
 
-    def px_get_column(self, n):
-        nrow = self.px_get_row(n)
+    def px_get_column(self, pixel):
+        nrow = self.px_get_row(pixel)
         if nrow == 0:
-            ncol = n - dim_x
+            ncol = pixel - self.matrix.dim_x
         else:
-            ncol = n - (dim_x * nrow) + dim_x + 1
+            ncol = pixel - (self.matrix.dim_x * nrow) + self.matrix.dim_x + 1
         return ncol
 
-    def scroll_text(self, text, speed=0.5, c_fg="ff0000", c_bg="ffffff", dir="left"):
+    def scroll_text(self, text, speed=0.5, c_fg="ff0000", c_bg="ffffff", direction="left"):
         nframes = text.__len__() * self.npxm
         start = 0
         t=[]
@@ -557,10 +577,10 @@ class Matrix(Server):
         for y in range(text.__len__()):
             t.append(text[y])
 
-        for x in range(0, nframes):
+        for _ in range(0, nframes):
             frame = []
 
-            if dir == "left":
+            if direction == "left":
                 z = 0
                 l = t.__len__() - 5
                 for y in range(l):
@@ -583,7 +603,7 @@ class Matrix(Server):
                 self.draw(frame)
 
 
-            if dir == "up":
+            if direction == "up":
                 for y in range(self.npxm):
                     if text[start+y]:
                         c = c_bg
@@ -597,27 +617,28 @@ class Matrix(Server):
             self.draw(frame)
             time.sleep(speed)
 
-    def show_text(self, s, scroll=True, loop=True, speed=1):
+    def show_text(self, string, scroll=True, loop=True, speed=1):
         t_sleep = speed
         text = ""
 
         if scroll:
-            for x in range(s.__len__()):
-                text += str(self.font_get_char(s[x]))
+            for x in range(string.__len__()):
+                text += str(self.font_get_char(string[x]))
             self.scroll_text(text, speed)
 
         else:
             if loop:
                 while True:
-                    for x in range(s.__len__()):
-                        self.font_show_char(s[x])
+                    for x in range(string.__len__()):
+                        self.font_show_char(string[x])
                         time.sleep(t_sleep)
 
-            for x in range(s.__len__()):
-                self.font_show_char(s[x])
+            for x in range(string.__len__()):
+                self.font_show_char(string[x])
                 time.sleep(t_sleep)
 
-    def font_get_char(self, c):
+    @staticmethod
+    def font_get_char(char):
         f5x5 = {"A" : "0010001010011100101001010",
                 "B" : "1111010001111101000111110",
                 "C" : "0111110000100001000001111",
@@ -638,11 +659,11 @@ class Matrix(Server):
                 "<" : "0001000100010000010000010",
                 ":" : "0000000100000000010000000"}
 
-        return f5x5[c]
+        return f5x5[char]
 
-    def font_show_char(self, c, c_fg="FF0000", c_bg="FFFFFF"):
+    def font_show_char(self, char, c_fg="FF0000", c_bg="FFFFFF"):
         frame = []
-        p = self.font_get_char(c)
+        p = self.font_get_char(char)
 
         for x in range(p.__len__()):
             px = p[x]
@@ -673,43 +694,48 @@ class Matrix(Server):
 
 class Bitmap():
 
-    def __init__(self, fn, x, y):
+    def __init__(self, filename, x, y):
         self.dim_x = x
         self.dim_y = y
-        self.height = self.get_height(fn)
-        self.width = self.get_width(fn)
+        self.height = self.get_height(filename)
+        self.width = self.get_width(filename)
 
-    def colour_rgb_to_hex(self, rgb):
+    @staticmethod
+    def colour_rgb_to_hex(rgb):
         return ''.join(["%0.2X" % c for c in rgb])
 
-    def read_file(self, fn):
-        file = open(fn, "rb")
+    @staticmethod
+    def read_file(filename):
+        file = open(filename, "rb")
         data = file.read()
         file.close()
         return data
 
-    def get_header_size(self, fn):
+    @staticmethod
+    def get_header_size(filename):
         offset = 10
-        fh = open(fn, 'rb')
+        fh = open(filename, 'rb')
         fh.seek(offset, 0)
         pixel_array_offset = struct.unpack('I', fh.read(4))
         return pixel_array_offset[0]
 
-    def get_height(self, fn):
+    @staticmethod
+    def get_height(filename):
         offset = 10
-        fh = open(fn, 'rb')
+        fh = open(filename, 'rb')
         fh.seek(offset, 0)
         width = struct.unpack('I', fh.read(4))
         return width[0]
 
-    def get_width(self, fn):
+    @staticmethod
+    def get_width(filename):
         return 24
 
-    def read_pixel_array(self, fn):
-        fh = open(fn, "rb")
+    def read_pixel_array(self, filename):
+        fh = open(filename, "rb")
 
         # Skip the DIB header (12-124)
-        header_size = self.get_header_size(fn)
+        header_size = self.get_header_size(filename)
         fh.seek(header_size, 0)
 
         # Pixels are stored starting at the bottom left
@@ -758,8 +784,9 @@ class Bitmap():
         fh.close()
         return frame
 
-    def print_header_data(self, fn):
-        bmp = open(fn, 'rb')
+    @staticmethod
+    def print_header_data(filename):
+        bmp = open(filename, 'rb')
         print('Type:', bmp.read(2).decode())
         print('Size: %s' % struct.unpack('I', bmp.read(4)))
         print('Reserved 1: %s' % struct.unpack('H', bmp.read(2)))
@@ -780,25 +807,25 @@ class Bitmap():
 
 class UDPClient():
 
-    def __init__(self, ip, port):
-        self.ip = ip
-        self.port = port
+    def __init__(self, c_ip, c_port):
+        self.client_ip = c_ip
+        self.client_port = c_port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #self.sock.setsockopt(socket.IPPROTO_IP, IN.IP_MTU_DISCOVER, IN.IP_PMTUDISC_WANT)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.SO_REUSEADDR, 1)
         #self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
 
-    def send(self, m):
+    def send(self, msg):
         try:
-            self.sock.sendto(bytes.fromhex(m), (self.ip, self.port))
+            self.sock.sendto(bytes.fromhex(msg), (self.client_ip, self.client_port))
         except Exception as e:
             log.info(str(e))
             log.info("Network unavailable. Aborting")
             sys.exit(1)
 
-    def sendm(self, m):
+    def sendm(self, msg):
         try:
-            self.sock.sendto(bytes(m, "UTF-8"), (self.ip, self.port))
+            self.sock.sendto(bytes(msg, "UTF-8"), (self.client_ip, self.client_port))
         except:
             log.info("Network unavailable. Aborting")
             sys.exit(1)
@@ -809,7 +836,7 @@ class KeyInput():
     old_settings = None
 
     def __init__(self):
-        self.ch_set = []
+        self.key_set = []
         self.old_settings = termios.tcgetattr(sys.stdin)
 
         new_settings = termios.tcgetattr(sys.stdin)
@@ -817,27 +844,29 @@ class KeyInput():
         new_settings[6][termios.VMIN] = 0
         new_settings[6][termios.VTIME] = 0
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
-        self.ch = ""
+        self.key = ""
 
     def get_key(self):
-        self.ch = os.read(sys.stdin.fileno(), 3)
+        self.key = os.read(sys.stdin.fileno(), 3)
 
-        if self.ch is not None and len(self.ch) > 0:
-            self.ch_set.append(self.ch)
+        if self.key is not None and len(self.key) > 0:
+            self.key_set.append(self.key)
 
-        return self.ch
+        return self.key
 
     def get_key_parsed(self):
-        self.ch = self.get_key()
+        self.key = self.get_key()
 
-        if self.ch  == bytes('\x1b[A', "utf-8"):
+        if self.key  == bytes('\x1b[A', "utf-8"):
             return "up"
-        elif self.ch == bytes('\x1b[B', "utf-8"):
+        if self.key == bytes('\x1b[B', "utf-8"):
             return "down"
-        elif self.ch == bytes('\x1b[C', "utf-8"):
+        if self.key == bytes('\x1b[C', "utf-8"):
             return "right"
-        elif self.ch == bytes('\x1b[D', "utf-8"):
+        if self.key == bytes('\x1b[D', "utf-8"):
             return "left"
+
+        return False
 
     #@atexit.register
     def exit(self):
@@ -860,7 +889,7 @@ class SnakeGame():
         self.c_fg = c_fg
         self.c_bg = c_bg
         self.c_food = c_food
-        self.kb = KeyInput()
+        self.keyboard = KeyInput()
         self.matrix.draw(self.get_frame())
         dirs = ["up", "down", "left", "right"]
         direction = random.choice(dirs)
@@ -872,7 +901,7 @@ class SnakeGame():
 
         while True:
 
-            key = self.kb.get_key_parsed()
+            key = self.keyboard.get_key_parsed()
 
             if key is not None and len(key) > 0:
 
@@ -905,26 +934,26 @@ class SnakeGame():
         self.px_snake_head = px
         return px
 
-    def move(self, dir):
+    def move(self, direction):
         px = 0
-        ncol = self.matrix.px_get_column(self.px_snake_head)
-        nrow = self.matrix.px_get_row(self.px_snake_head)
-        if not dir:
-            snake_add_px(random.randint())
+        #ncol = self.matrix.px_get_column(self.px_snake_head)
+        #nrow = self.matrix.px_get_row(self.px_snake_head)
+        if not direction:
+            snake_add_px(random.randint(1, 4))
 
-        elif dir == "up":
+        elif direction == "up":
             px = self.px_snake_head - self.matrix.dim_y
 
             if px < 0:
-                px = self.px_snake_head + ((self.matrix.dim_x * self.matrix.dim_y) - dim_x)
+                px = self.px_snake_head + ((self.matrix.dim_x * self.matrix.dim_y) - self.matrix.dim_x)
 
-        elif dir == "down":
+        elif direction == "down":
             px = self.px_snake_head + self.matrix.dim_y
 
             if px > self.matrix.npxm - 1:
                 px = self.matrix.px_get_column(self.px_snake_head) - 1
 
-        elif dir == "left":
+        elif direction == "left":
             if self.matrix.px_get_column(self.px_snake_head) == 1:
                 px = self.px_snake_head + self.matrix.dim_x - 1
             else:
@@ -932,7 +961,7 @@ class SnakeGame():
             if px < 0:
                 px = self.matrix.dim_x - 1
 
-        elif dir == "right":
+        elif direction == "right":
             if self.matrix.px_get_column(self.px_snake_head) == self.matrix.dim_x:
                 px = self.px_snake_head - self.matrix.dim_x -1
             else:
@@ -1012,7 +1041,6 @@ class Service:
             for k, v in env.items():
                 self.env_args += "--setenv=" + k + "=" + str(v) + " "
 
-
     def get_state(self):
         cmd = "systemctl --user show -p SubState " + self.name
         p = self.run_cmd(cmd)
@@ -1064,9 +1092,8 @@ class Service:
         self.start("transient")
 
     def start(self, service_type="transient"):
-        log.info("Starting service %s with type '%s': %s", self.name
-                                                         , service_type)
-
+        log.info("Starting service %s with type: %s", self.name
+                                                    , service_type)
 
         cmd = 'systemd-run --user \
                            --unit=' + self.name + ' \
@@ -1080,7 +1107,7 @@ class Service:
         # for readability
         cmd = ' '.join(cmd.split())
 
-        p = self.run_cmd(cmd, shell=False, stdout=False, stderr=False)
+        p = self.run_cmd(cmd, True)
         if p.stdout.strip('\n') == "Failed to start transient service unit: Unit " + self.name + " already exists.":
             self.restart()
 
@@ -1101,14 +1128,15 @@ class Service:
         cmd = 'systemctl --user reset-failed ' + self.name
         self.run_cmd(cmd)
 
-    def run_cmd(self, cmd,
-                      shell=True,
-                      stdin=None,
-                      stdout=subprocess.PIPE,
-                      stderr=subprocess.STDOUT,
-                      universal_newlines=True,
-                      env={},
-                      check=False):
+    @staticmethod
+    def run_cmd(cmd,
+                shell=True,
+                stdin=None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                env=os.environ,
+                check=False):
 
         log.debug("Executing: %s", cmd)
 
@@ -1143,10 +1171,10 @@ class Homekit():
     def __init__(self, ip, port):
         self.hk_server_ip = ip
         self.hk_server_port = port
-        self.c = UDPClient(self.hk_server_ip, self.hk_server_port)
+        self.client = UDPClient(self.hk_server_ip, self.hk_server_port)
 
     def toggle(self, value):
-        self.c.sendm("toggle")
+        self.client.sendm("toggle")
 
     def homekit_add_accessory(self):
         try:
@@ -1282,7 +1310,7 @@ if __name__ == '__main__':
     PAYLOAD = "turn-on"
 
     action = ""
-    msg = ""
+    cmd_msg = ""
 
     if len(sys.argv) > 1:
         action = sys.argv[1]
@@ -1324,17 +1352,17 @@ if __name__ == '__main__':
             server.receive()
 
     if len(action) > 0:
-        msg = action
+        cmd_msg = action
         if len(sys.argv) > 3:
-            msg = sys.argv[1] + " " + sys.argv[2] + " " + sys.argv[3]
+            cmd_msg = sys.argv[1] + " " + sys.argv[2] + " " + sys.argv[3]
         elif len(sys.argv) > 2:
-            msg = sys.argv[1] + " " + sys.argv[2]
+            cmd_msg = sys.argv[1] + " " + sys.argv[2]
         elif len(sys.argv) > 1:
-            msg = sys.argv[1]
+            cmd_msg = sys.argv[1]
 
     sys.argv = []
 
-    if len(msg) > 0:
-        log.debug("Sending: %s", msg)
+    if len(cmd_msg) > 0:
+        log.debug("Sending: %s", cmd_msg)
         client = UDPClient(ledctrl_address, ledctrl_port)
-        client.sendm(msg)
+        client.sendm(cmd_msg)
